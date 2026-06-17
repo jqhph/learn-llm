@@ -1,0 +1,908 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>第 6 课：答案质量评估与 RAGAS —— 从"检得准"到"答得好"</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink:#172033; --muted:#667085; --line:#d7dde8; --accent:#0f766e;
+      --accent2:#8b5e00; --good:#116329; --bad:#a10e25; --bg:#fbfcfe; --panel:#fff;
+    }
+    * { box-sizing: border-box; }
+    body { margin:0; font-family: ui-serif, Georgia, "Noto Serif SC", serif; color:var(--ink); background:var(--bg); line-height:1.7; }
+    main { max-width: 900px; margin: 0 auto; padding: 42px 22px 70px; }
+    header { margin-bottom: 30px; }
+    .kicker { font: 700 13px/1.2 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color:var(--accent); text-transform: uppercase; letter-spacing: .08em; }
+    h1 { font-size: clamp(32px, 5vw, 54px); line-height:1.08; margin: 10px 0 12px; letter-spacing:0; }
+    h2 { font-size: 23px; margin: 34px 0 12px; padding-bottom: 6px; border-bottom:1px solid var(--line); }
+    h3 { font-size: 18px; margin: 20px 0 8px; }
+    p { margin: 0 0 14px; }
+    a { color:#0b5cad; text-decoration-thickness:1px; text-underline-offset:3px; }
+    .lede { color:var(--muted); max-width:760px; font-size:18px; }
+    .panel { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:18px; margin:16px 0; }
+    .panel.good { border-left:4px solid var(--good); }
+    .panel.warn { border-left:4px solid var(--accent2); }
+    .panel.info { border-left:4px solid var(--accent); }
+    code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    code { background:#eef6f5; padding:2px 5px; border-radius:4px; font-size:0.92em; }
+    pre { overflow:auto; background:#f6f8fa; color:var(--ink); border:1px solid var(--line); border-radius:8px; padding:16px; font-size:14px; line-height:1.55; }
+    .small { color:var(--muted); font-size:14px; }
+    .tag { display:inline-block; background:var(--accent); color:#fff; border-radius:4px; padding:2px 8px; font-size:12px; font-weight:700; letter-spacing:.03em; font-family:ui-sans-serif,system-ui; }
+    .tag.faith { background:#1e40af; }
+    .tag.rel { background:#6d28d9; }
+    .tag.cp { background:#b45309; }
+    .tag.cr { background:#0d9488; }
+    .quiz { display:grid; gap:10px; margin-top:12px; }
+    button { border:1px solid var(--line); background:#fff; border-radius:8px; padding:11px 13px; text-align:left; font:600 15px/1.35 ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif; color:var(--ink); cursor:pointer; }
+    button:hover { border-color:var(--accent); }
+    button.selected { border-color:var(--accent); background:#eef6f5; }
+    button.correct { border-color:var(--good); background:#edf8ef; color:var(--good); }
+    button.wrong { border-color:var(--bad); background:#fff0f2; color:var(--bad); }
+    .feedback { min-height:26px; font-weight:700; margin-top:8px; }
+    .task { border-left:4px solid var(--accent2); padding-left:14px; }
+    table { border-collapse:collapse; width:100%; margin:14px 0; }
+    th, td { border:1px solid var(--line); padding:8px 12px; text-align:left; font-size:15px; }
+    th { background:#f6f8fa; font-weight:700; }
+    ul, ol { padding-left:22px; }
+    .combo { display:grid; grid-template-columns: 1fr 1fr; gap:14px; margin:16px 0; }
+    .flow { display:flex; align-items:center; gap:8px; flex-wrap:wrap; justify-content:center; margin:16px 0; }
+    .flow-box { border:1px solid var(--line); border-radius:6px; padding:8px 14px; background:var(--panel); font-size:14px; text-align:center; }
+    .flow-arrow { font-size:20px; color:var(--muted); }
+    .formula { text-align:center; font-size:18px; margin:12px 0; padding:10px; background:#f6f8fa; border-radius:8px; }
+    .matrix { display:grid; grid-template-columns: 1fr 1fr; gap:12px; margin:14px 0; }
+    .matrix-cell { border:1px solid var(--line); border-radius:8px; padding:14px; }
+    .matrix-cell h4 { margin:0 0 6px; font-size:15px; }
+    @media (max-width: 640px) { .combo { grid-template-columns: 1fr; } .matrix { grid-template-columns: 1fr; } }
+    @media print { body { background:white; } main { max-width:none; padding:20mm; } .panel { break-inside: avoid; } button { border-color:#aaa; } }
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <div class="kicker">Lesson 0006</div>
+    <h1>答案质量评估与 RAGAS：从"检得准"到"答得好"</h1>
+    <p class="lede">本课目标：你已能用 Recall@K 证明检索质量。但好的检索是否必然带来好的答案？本课教你用 Faithfulness、Answer Relevancy 等指标量化答案质量，建立 RAG 系统的"最终质检关"。</p>
+  </header>
+
+  <section>
+    <h2>你今天要获得的能力</h2>
+    <p>学完本课，你将拥有：</p>
+    <ul>
+      <li>理解 <strong>RAGAS 框架</strong>的四个核心指标：Faithfulness（忠实度）、Answer Relevancy（答案相关度）、Context Precision（上下文精确度）、Context Recall（上下文召回率）</li>
+      <li>一个 <strong>answer_evaluator.py</strong> 模块，使用 LLM-as-a-Judge 自动评分答案质量</li>
+      <li>一套 <strong>端到端评估流水线</strong>：从 golden 数据 → 检索 → 生成 → 评分 → 报告输出</li>
+      <li>对 <strong>LLM-as-a-Judge 的元认知</strong>：它的偏差、成本、可靠性，以及何时该用人</li>
+    </ul>
+    <p>这是你的 RAG 从 "检得准" 到 "答得好" 的关键一跃——也是你判断系统是否真正可用的最终标准。</p>
+    <p class="small">推荐阅读：<a href="https://docs.ragas.io/">RAGAS 官方文档</a>、<a href="https://arxiv.org/abs/2309.15217">RAGAS 论文（Es et al., 2023）</a>。回顾上一课：<a href="0005-混合检索与查询转换.html">第 5 课：混合检索与查询转换</a>。速查表：<a href="../reference/0006-答案质量评估与RAGAS-cheatsheet.html">答案质量评估速查表</a>。</p>
+  </section>
+
+  <section>
+    <h2>好的检索 ≠ 好的答案</h2>
+
+    <p>经过前两课的学习，你的检索系统已经很强了——Recall@5 可能超过 0.85，MRR 也处于不错水平。但让我们直面一个残酷的事实：<strong>检索质量高是答案质量高的必要非充分条件。</strong></p>
+
+    <div class="panel warn">
+      <h3>场景一：检索满分，答案跑题</h3>
+      <p><strong>查询：</strong>"7 天无理由退货的运费谁承担？"</p>
+      <p><strong>检索到的 chunk（最相关的）：</strong>"自客户签收商品次日起 7 天内可申请无理由退货。退回商品需保持完好、不影响二次销售。运费由客户承担。定制商品不适用于无理由退货。"</p>
+      <p><strong>LLM 回答：</strong>"根据政策，7 天无理由退货需要商品保持完好、不影响二次销售。定制商品不适用于无理由退货。"</p>
+      <p class="good" style="margin-top:4px;">✅ Recall@5 = 1.0（完美命中），❌ 但答案根本没有回答"运费谁承担"！</p>
+    </div>
+
+    <div class="panel warn">
+      <h3>场景二：幻觉——答案编造了上下文没有的信息</h3>
+      <p><strong>查询：</strong>"退货的退款要多久到账？"</p>
+      <p><strong>检索到的 chunk：</strong>"退货申请审核通过后，我们会在 3-5 个工作日内处理退款。"</p>
+      <p><strong>LLM 回答：</strong>"退款通常在 1-2 个工作日内到账，具体取决于您的发卡行。"</p>
+      <p class="bad" style="margin-top:4px;">❌ 上下文明确说 "3-5 个工作日"，LLM 却回答 "1-2 个工作日"——这是典型的忠实度失败。</p>
+    </div>
+
+    <p>这些问题，<strong>Recall@K 和 MRR 完全检测不出来</strong>——因为它们只评估检索，不评估生成。你需要一套新的指标来回答：</p>
+    <ol>
+      <li><strong>Faithfulness（忠实度）</strong>：LLM 有没有"看到"上下文的内容？</li>
+      <li><strong>Answer Relevancy（答案相关度）</strong>：答案是不是真的在回答用户问题？</li>
+      <li><strong>Context Precision（上下文精确度）</strong>：检索返回的 chunk 中有没有太多噪音？</li>
+      <li><strong>Context Recall（上下文召回率）</strong>：检索到的 chunk 是否包含了回答所需的全部信息？</li>
+    </ol>
+    <p>这四个指标合在一起，就是 RAGAS（Retrieval Augmented Generation Assessment）框架的核心。本课你将从零实现它们。</p>
+  </section>
+
+  <section>
+    <h2>RAGAS 的四个指标详解</h2>
+
+    <div class="combo">
+      <div class="matrix-cell" style="border-left:4px solid #1e40af;">
+        <h4>🟦 Faithfulness（忠实度）</h4>
+        <p class="small" style="margin:4px 0;">答案的内容是否全部有上下文支撑？</p>
+        <p class="small" style="color:var(--muted);">方法：将答案拆成 claims → 逐一判断是否被 context 支持 → 比例</p>
+      </div>
+      <div class="matrix-cell" style="border-left:4px solid #6d28d9;">
+        <h4>🟪 Answer Relevancy（答案相关度）</h4>
+        <p class="small" style="margin:4px 0;">答案是否回答了用户的问题？</p>
+        <p class="small" style="color:var(--muted);">方法：根据答案生成伪问题 → 与原始问题计算语义相似度</p>
+      </div>
+      <div class="matrix-cell" style="border-left:4px solid #b45309;">
+        <h4>🟧 Context Precision（上下文精确度）</h4>
+        <p class="small" style="margin:4px 0;">检索返回的 chunk 中有多少是真正相关的？</p>
+        <p class="small" style="color:var(--muted);">方法：逐条判断 chunk 与问题的相关性 → 加权排序</p>
+      </div>
+      <div class="matrix-cell" style="border-left:4px solid #0d9488;">
+        <h4>🟩 Context Recall（上下文召回率）</h4>
+        <p class="small" style="margin:4px 0;">回答所需的全部信息是否都在上下文中了？</p>
+        <p class="small" style="color:var(--muted);">方法：根据答案反向要求 → 判断每条要求是否被 context 覆盖</p>
+      </div>
+    </div>
+
+    <h3>指标一：Faithfulness（忠实度）—— 最重要的答案质量指标</h3>
+    <p>Faithfulness 回答的问题是："LLM 的答案中，有多少陈述是上下文直接支持的？" 这是 RAG 质量的<strong>红线指标</strong>——幻觉可以杀死任何一个 RAG 产品的信任度。</p>
+    <p>计算过程分为三步：</p>
+    <ol>
+      <li><strong>声明抽取（Claim Extraction）</strong>：将 LLM 的答案拆分为原子级的独立陈述。例如"运费由客户承担。定制商品不适用。" → ["运费由客户承担", "定制商品不适用"]</li>
+      <li><strong>逐条验证（Verdict）</strong>：对每条声明，交给 LLM 判断"上下文是否支持这条声明？" → 返回 YES / NO / PARTIAL</li>
+      <li><strong>计算比例</strong>：Faithfulness = YES 的数量 / (YES + NO + PARTIAL) 的数量</li>
+    </ol>
+    <p class="formula">Faithfulness = 支持的声明数 / 总声明数</p>
+
+    <h3>指标二：Answer Relevancy（答案相关度）</h3>
+    <p>Answer Relevancy 回答："这个答案是不是在回答用户问的东西？" 一个 d perfect faithful 但答非所问的答案（比如复述政策原文但不回答具体问题），Faithfulness 可能很高但 Answer Relevancy 很低。</p>
+    <p>RAGAS 论文中的计算方式：</p>
+    <ol>
+      <li>让 LLM 根据答案反向生成 N 个伪问题（如 4 个）</li>
+      <li>计算每个伪问题与原始问题的 <strong>余弦相似度</strong>（通过 embedding）</li>
+      <li>取平均相似度作为 Answer Relevancy</li>
+    </ol>
+    <p>但实践中，更简单的方法也常用：直接让 LLM 对"答案和问题的匹配程度"做 1-5 分评分。</p>
+
+    <h3>指标三：Context Precision（上下文精确度）</h3>
+    <p>Context Precision 回答："检索返回的那些 chunk 里，是不是混了很多不相关的东西？" 有时候你的检索可能返回了 5 条中有 3 条相关、2 条噪音——噪音本身虽然不会直接破坏答案（因为 LLM 可能忽略它们），但它会占用 LLM 的上下文窗口，且增加了 LLM"被噪音误导"的风险。</p>
+    <p>计算方法：对每条返回的 chunk，按排序顺序判断其是否与问题相关，然后使用 <strong>加权精度</strong>公式，给予排在更前面的相关 chunk 更高权重。</p>
+
+    <h3>指标四：Context Recall（上下文召回率）</h3>
+    <p>Context Recall 回答："要回答这个问题，上下文中缺不缺关键信息？" 有时候检索可能漏掉了某个重要段落——Recall@K 已经告诉你"正确答案的 chunk 没在 top-K 里"，但 Context Recall 更进一步：即使 chunk 都到了，也可能缺了回答所需的关键信息。</p>
+    <p>计算方式：将答案中做出的"声明"与上下文匹配——如果答案中提到了"运费是 15 元"，但上下文只说了"运费按距离计算"而没有具体金额，那这条声明就是不 recall (未召回) 的。</p>
+
+    <div class="panel info">
+      <h3>四个指标的关系速览</h3>
+      <table>
+        <tr><th>指标</th><th>评估对象</th><th>回答的问题</th><th>重要性</th></tr>
+        <tr><td>Faithfulness</td><td>生成答案 vs 上下文</td><td>答案是否忠实于上下文？</td><td>⭐⭐⭐⭐⭐（红线）</td></tr>
+        <tr><td>Answer Relevancy</td><td>生成答案 vs 用户查询</td><td>答案是否回答了问题？</td><td>⭐⭐⭐⭐</td></tr>
+        <tr><td>Context Precision</td><td>检索上下文 vs 用户查询</td><td>检索到的 chunk 中有多少是相关的？</td><td>⭐⭐⭐</td></tr>
+        <tr><td>Context Recall</td><td>检索上下文 vs 生成答案</td><td>回答所需的信息是否都在上下文中了？</td><td>⭐⭐⭐</td></tr>
+      </table>
+      <p class="small">排序并不代表 Context Precision/Recall 不重要——只是从"系统故障优先级"角度，Faithfulness 问题是最致命的。如果你的系统 Faithfulness 低于 0.7，先修好它再谈其他。</p>
+    </div>
+
+    <div class="panel good">
+      <h3>一个重要的直觉</h3>
+      <p>这四个指标分成两组：</p>
+      <ul>
+        <li><strong>检索侧</strong>（Context Precision + Context Recall）：你的检索系统是否<em>找到了对的内容</em>？</li>
+        <li><strong>生成侧</strong>（Faithfulness + Answer Relevancy）：你的 LLM 是否<em>正确使用了</em>检索到的内容？</li>
+      </ul>
+      <p>这意味着：如果某条查询的 Faithfulness 很低（如 0.4），但 Context Recall 很高（如 0.9），问题大概率在 LLM 的 prompt 上（没让它严格遵循上下文），而非检索上。反之亦然。</p>
+    </div>
+  </section>
+
+  <section>
+    <h2>第一步：构建 answer_evaluator.py</h2>
+    <p>现在我们将这四个指标实现为一个可复用的 Python 模块。核心思想是 <strong>LLM-as-a-Judge</strong>：不依赖标注数据集，而是让 LLM 来当裁判，对每条 (query, answer, context) 三元组打分。</p>
+
+    <pre><code>"""
+answer_evaluator.py — 答案质量评估器（LLM-as-a-Judge 方式）
+指标：Faithfulness, Answer Relevancy, Context Precision, Context Recall
+
+依赖：pip install openai
+用法：python answer_evaluator.py
+"""
+import json
+import os
+import statistics
+from typing import Any
+from openai import OpenAI
+
+client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+
+# ---------- Helper: 统一的 LLM 调用 ----------
+
+_judge_model = "gpt-4o-mini"  # 用快模型打分，省成本
+
+
+def _judge(system: str, user: str, max_tokens: int = 512) -> str:
+    """调用 LLM 作为裁判，返回 JSON 文本"""
+    resp = client.chat.completions.create(
+        model=_judge_model,
+        temperature=0.0,
+        messages=[
+            {"role": "system", "content": system},
+            {"role": "user", "content": user},
+        ],
+        max_tokens=max_tokens,
+    )
+    text = resp.choices[0].message.content.strip()
+    # 尝试提取 JSON（LLM 有时会加 markdown 包裹）
+    if text.startswith("```"):
+        text = text.split("\n", 1)[1].rsplit("```", 1)[0].strip()
+    return text
+
+
+# ========== 1. Faithfulness（忠实度） ==========
+
+_FAITHFULNESS_SYSTEM = """你是 RAG 系统的忠实度评估员。
+你的任务：将给定的答案拆解为独立的、原子性的陈述（claims），然后逐一判断上下文是否支持该陈述。
+
+输出 JSON 格式：
+{
+  "claims": [
+    {"claim": "陈述原文", "verdict": "YES" | "NO" | "PARTIAL", "evidence": "上下文中支持/反对的原文片段"}
+  ],
+  "faithfulness_score": 0.0-1.0,
+  "notes": "说明"
+}
+
+评分规则：
+- 如果上下文中明确提到了该陈述 → YES
+- 如果上下文中明确否定了该陈述 → NO
+- 如果上下文中部分提到了但不够完整 → PARTIAL（例如上下文说"3-5 个工作日"，答案说"大约一周"）
+- YES 计 1 分，PARTIAL 计 0.5 分，NO 计 0 分
+- faithfulness_score = 总分 / claim 总数"""
+
+
+def faithfulness(query: str, answer: str, contexts: list[str]) -> dict:
+    """评估答案对上下文的忠实度"""
+    context_text = "\n\n---\n\n".join(
+        f"[文档 {i+1}] {c}" for i, c in enumerate(contexts)
+    )
+    user_prompt = f"""【用户查询】
+{query}
+
+【检索到的上下文】
+{context_text}
+
+【LLM 生成的答案】
+{answer}"""
+
+    result_text = _judge(_FAITHFULNESS_SYSTEM, user_prompt)
+    try:
+        result = json.loads(result_text)
+    except json.JSONDecodeError:
+        return {
+            "faithfulness_score": None,
+            "claims": [],
+            "notes": f"JSON 解析失败。原始输出：{result_text[:200]}",
+        }
+    result["query"] = query
+    result["answer"] = answer
+    return result
+
+
+# ========== 2. Answer Relevancy（答案相关度） ==========
+
+_ANSWER_RELEVANCY_SYSTEM = """你是 RAG 系统的答案相关度评估员。
+你的任务：评估 LLM 生成的答案是否真正回答了用户查询。
+
+输出 JSON 格式：
+{
+  "relevancy_score": 0-5,
+  "reasoning": "为什么给这个分数",
+  "missing_points": ["答案中遗漏的关键点列表"],
+  "irrelevant_parts": ["答案中多余/不相关的内容列表"]
+}
+
+评分标准：
+5 = 答案完美精准地回答了用户查询的全部内容
+4 = 答案回答了核心问题，但遗漏了次要细节
+3 = 答案部分回答了问题，但关键信息缺失
+2 = 答案与问题相关但方向和核心答得不准确
+1 = 答案与问题勉强有关但没有直接回答
+0 = 答案与问题完全无关"""
+
+
+def answer_relevancy(query: str, answer: str) -> dict:
+    """评估答案是否回答了用户问题"""
+    user_prompt = f"""【用户查询】
+{query}
+
+【LLM 生成的答案】
+{answer}"""
+
+    result_text = _judge(_ANSWER_RELEVANCY_SYSTEM, user_prompt)
+    try:
+        result = json.loads(result_text)
+    except json.JSONDecodeError:
+        return {
+            "relevancy_score": None,
+            "reasoning": f"JSON 解析失败：{result_text[:200]}",
+        }
+    result["query"] = query
+    result["answer"] = answer
+    return result
+
+
+# ========== 3. Context Precision（上下文精确度） ==========
+
+_CONTEXT_PRECISION_SYSTEM = """你是 RAG 系统的上下文精确度评估员。
+你的任务：对检索返回的每个上下文文档逐一判断是否与用户查询相关。
+
+输出 JSON 格式：
+{
+  "documents": [
+    {
+      "doc_index": 1,
+      "relevant": true | false,
+      "reason": "判断理由"
+    },
+    ...
+  ],
+  "context_precision_score": 0.0-1.0,
+  "notes": "评估结论"
+}
+
+相关定义：如果文档包含回答用户查询所需要的任何信息，则为相关。
+注意精确度对排序敏感——排在更前面的相关文档应该被给予更高的重要性。"""
+
+
+def context_precision(query: str, contexts: list[str]) -> dict:
+    """评估检索返回的上下文中有多少是相关的"""
+    context_text = "\n\n".join(
+        f"[文档 {i+1}] {c}" for i, c in enumerate(contexts)
+    )
+    user_prompt = f"""【用户查询】
+{query}
+
+【检索返回的上下文文档列表】
+{context_text}
+
+请逐一判断每个文档是否与查询相关。"""
+
+    result_text = _judge(_CONTEXT_PRECISION_SYSTEM, user_prompt)
+    try:
+        raw = json.loads(result_text)
+    except json.JSONDecodeError:
+        return {
+            "context_precision_score": None,
+            "documents": [],
+            "notes": f"JSON 解析失败：{result_text[:200]}",
+        }
+
+    # 计算加权精度：相关文档按其排序位置加权
+    docs = raw.get("documents", [])
+    if docs:
+        total_weight = sum(1.0 / (i + 1) for i in range(len(docs)))  # 总权重（假设全部相关）
+        relevant_weight = sum(
+            (1.0 / (d["doc_index"])) if d.get("relevant") else 0.0
+            for d in docs
+        )
+        score = relevant_weight / total_weight if total_weight > 0 else 0.0
+    else:
+        score = None
+
+    raw["context_precision_score"] = round(score, 4) if score else None
+    raw["query"] = query
+    return raw
+
+
+# ========== 4. Context Recall（上下文召回率） ==========
+
+_CONTEXT_RECALL_SYSTEM = """你是 RAG 系统的上下文召回率评估员。
+你的任务：分析 LLM 生成的答案，列出答案中做出的所有事实性声明，然后判断这些声明是否能在检索到的上下文中找到支持。
+
+输出 JSON 格式：
+{
+  "claims": [
+    {
+      "claim": "答案中做出的声明",
+      "supported": true | false,
+      "supporting_evidence": "上下文中支持的原文（如果支持的话）",
+      "notes": "说明"
+    }
+  ],
+  "context_recall_score": 0.0-1.0,
+  "missing_information": ["上下文中缺失的关键信息列表"],
+  "notes": "总体评估"
+}
+
+context_recall_score = 被支持的声明数 / 总声明数"""
+
+
+def context_recall(query: str, answer: str, contexts: list[str]) -> dict:
+    """评估上下文中是否包含了回答所需的所有信息"""
+    context_text = "\n\n---\n\n".join(
+        f"[文档 {i+1}] {c}" for i, c in enumerate(contexts)
+    )
+    user_prompt = f"""【用户查询】
+{query}
+
+【检索到的上下文】
+{context_text}
+
+【LLM 生成的答案】
+{answer}"""
+
+    result_text = _judge(_CONTEXT_RECALL_SYSTEM, user_prompt)
+    try:
+        result = json.loads(result_text)
+    except json.JSONDecodeError:
+        return {
+            "context_recall_score": None,
+            "claims": [],
+            "notes": f"JSON 解析失败：{result_text[:200]}",
+        }
+    result["query"] = query
+    result["answer"] = answer
+    return result
+
+
+# ========== 统一评估器 ==========
+
+
+def full_evaluate(
+    query: str,
+    answer: str,
+    contexts: list[str],
+) -> dict:
+    """对一组 (query, answer, contexts) 运行全部四个评估指标"""
+    return {
+        "faithfulness": faithfulness(query, answer, contexts),
+        "answer_relevancy": answer_relevancy(query, answer),
+        "context_precision": context_precision(query, contexts),
+        "context_recall": context_recall(query, answer, contexts),
+    }
+
+
+def batch_evaluate(
+    test_cases: list[dict],
+    retrieve_fn: callable,
+    generate_fn: callable,
+    max_contexts: int = 5,
+    verbose: bool = True,
+) -> dict:
+    """
+    批量端到端评估。
+
+    test_cases: [{"query": "...", "expected_answer_summary": "..."}] 可选
+    retrieve_fn(query) -> list[{"id": str, "text": str, "score": float}]
+    generate_fn(query, contexts) -> str
+    """
+    results = []
+    for i, tc in enumerate(test_cases):
+        query = tc["query"]
+        if verbose:
+            print(f"[{i+1}/{len(test_cases)}] 评估: {query[:60]}...")
+
+        retrieved = retrieve_fn(query)[:max_contexts]
+        contexts = [r["text"] for r in retrieved]
+        answer = generate_fn(query, contexts)
+        eval_result = full_evaluate(query, answer, contexts)
+
+        eval_result["_meta"] = {
+            "query": query,
+            "context_ids": [r["id"] for r in retrieved],
+        }
+        results.append(eval_result)
+
+    # 汇总
+    scores = {"faithfulness": [], "answer_relevancy": [], "context_precision": [], "context_recall": []}
+    for r in results:
+        for key in scores:
+            val = r[key].get(f"{key}_score") if key in r else r.get(f"{key}_score")
+            if val is not None:
+                scores[key].append(val)
+
+    summary = {}
+    for key, vals in scores.items():
+        vals = [v for v in vals if v is not None]
+        summary[key] = {
+            "mean": round(statistics.mean(vals), 4) if vals else None,
+            "std": round(statistics.stdev(vals), 4) if len(vals) > 1 else None,
+            "min": round(min(vals), 4) if vals else None,
+            "max": round(max(vals), 4) if vals else None,
+        }
+
+    return {"summary": summary, "details": results}
+
+
+def print_report(eval_result: dict) -> None:
+    """打印端到端评估报告"""
+    s = eval_result["summary"]
+    print(f"{'='*56}")
+    print(f"📊 RAG 答案质量评估报告")
+    print(f"{'='*56}")
+    print(f"评估样本数：{len(eval_result['details'])}")
+    print()
+    for metric in ["faithfulness", "answer_relevancy", "context_precision", "context_recall"]:
+        m = s.get(metric, {})
+        mean = m.get("mean")
+        if mean is not None:
+            print(f"  {metric:<20s}  {mean:.4f} (σ={m.get('std', 'N/A')})")
+    print()
+    print(f"{'='*56}")
+    print(f"💡 指标解读（参考阈值）：")
+    print(f"  faithfulness > 0.9        → 优秀，答案忠实于上下文")
+    print(f"  faithfulness 0.7-0.9     → 良好，有小幅幻觉需排查")
+    print(f"  faithfulness < 0.7        → ❌ 需要紧急修复（prompt 或检索）")
+    print(f"  answer_relevancy > 4.0    → 答案很好地回答了用户问题")
+    print(f"  answer_relevancy < 3.0    → 答案偏离了用户的问题")
+    print(f"  context_precision < 0.6   → 检索噪音偏多，需要优化检索")
+    print(f"  context_recall < 0.6      → 检索漏了关键信息，需增加 top-K 或改进 chunk")
+    print(f"{'='*56}")
+
+
+# ========== 测试入口 ==========
+
+if __name__ == "__main__":
+    # 快速测试
+    q = "7 天无理由退货的运费谁承担？"
+    ctx = [
+        "自客户签收商品次日起 7 天内可申请无理由退货。退回商品需保持完好、不影响二次销售。运费由客户承担。定制商品不适用。",
+        "如果收到商品存在质量问题，请在签收后 48 小时内联系客服，我们承担退货运费。",
+    ]
+    ans = "根据退货政策，7 天无理由退货的运费由客户承担。但如果是因为质量问题退货，运费由我们承担。"
+
+    print("🧪 快速测试 Faithfulness...")
+    f = faithfulness(q, ans, ctx)
+    print(f"  Faithfulness Score: {f['faithfulness_score']}")
+    for c in f["claims"]:
+        print(f"  - [{c['verdict']}] {c['claim'][:50]}")
+
+    print("\n🧪 快速测试 Answer Relevancy...")
+    r = answer_relevancy(q, ans)
+    print(f"  Relevancy Score: {r['relevancy_score']}/5")
+    print(f"  理由：{r['reasoning'][:100]}")
+
+    print("\n🧪 快速测试 Context Precision...")
+    cp = context_precision(q, ctx)
+    print(f"  Precision Score: {cp['context_precision_score']}")
+
+    print("\n🧪 快速测试 Context Recall...")
+    cr = context_recall(q, ans, ctx)
+    print(f"  Recall Score: {cr['context_recall_score']}")</code></pre>
+
+    <div class="panel info">
+      <h3>关于 Judge Model 的选择</h3>
+      <p>上面的代码使用 <code>gpt-4o-mini</code> 作为审判模型。这是一个很实用的平衡点：</p>
+      <ul>
+        <li><strong>gpt-4o-mini</strong>：性价比最高，适合日常评估（推荐起始选择）</li>
+        <li><strong>gpt-4o</strong>：更可靠但贵 15-20 倍，适合正式发布前的全面评估</li>
+        <li><strong>本地小模型（如 Qwen2.5-7B）</strong>：免费但可靠性较低，需要仔细调 prompt</li>
+      </ul>
+      <p>一个经过验证的模式：平时用 gpt-4o-mini 做快速迭代，关键里程碑用 gpt-4o 跑全量评估来校准。</p>
+    </div>
+  </section>
+
+  <section>
+    <h2>第二步：构建端到端评估流水线</h2>
+    <p>现在把你的检索器、生成器和评估器串起来——对 golden dataset 中的每条查询，执行完整的 "检索 → 生成 → 评估" 流程。</p>
+
+    <pre><code>"""
+eval_pipeline.py — 端到端评估流水线
+
+用法：
+  python eval_pipeline.py --golden golden.json --retriever hybrid --top-k 5
+"""
+import json
+import argparse
+from answer_evaluator import batch_evaluate, print_report
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--golden", default="./golden.json")
+    parser.add_argument("--retriever", default="hybrid", choices=["vector", "bm25", "hybrid"])
+    parser.add_argument("--top-k", type=int, default=5)
+    args = parser.parse_args()
+
+    # 加载 golden 测试集
+    with open(args.golden, "r", encoding="utf-8") as f:
+        test_cases = json.load(f)
+
+    # 初始化检索器（根据你第 5 课的模块）
+    from retrieval_adapter import get_retriever
+    retrieve_fn = get_retriever(args.retriever)
+
+    # 初始化生成器（根据你第 2 课的 demo）
+    from rag_demo import answer_query
+    def generate_fn(query, contexts):
+        return answer_query(query, contexts)
+
+    # 批量评估
+    result = batch_evaluate(
+        test_cases,
+        retrieve_fn=retrieve_fn,
+        generate_fn=generate_fn,
+        max_contexts=args.top_k,
+    )
+
+    # 输出报告
+    print_report(result)
+
+    # 保存详细结果
+    with open("eval_result.json", "w", encoding="utf-8") as f:
+        json.dump(result, f, ensure_ascii=False, indent=2)
+    print(f"\n详细结果已保存到 eval_result.json")
+
+
+if __name__ == "__main__":
+    main()</code></pre>
+
+    <div class="panel good">
+      <h3>你应该评估什么？</h3>
+      <p>端到端评估最大的价值在于 <strong>AB 比较</strong>。每次你对 RAG 系统做改动后，跑一遍评估报告并对比结果：</p>
+      <table>
+        <tr><th>改动类型</th><th>预期影响的指标</th></tr>
+        <tr><td>修改 prompt（更严格的"遵循上下文"指令）</td><td>🔺 Faithfulness</td></tr>
+        <tr><td>更换 embedding 模型</td><td>🔺 Context Precision + Context Recall</td></tr>
+        <tr><td>增加 top-K（5→10）</td><td>🔻 Context Precision（噪音增多），有可能🔺 Context Recall</td></tr>
+        <tr><td>增加重排序（Re-ranking）</td><td>🔺 Context Precision（把相关排前面），🔺 Faithfulness</td></tr>
+        <tr><td>增加查询重写（Query Rewrite）</td><td>🔺 Context Precision + Context Recall</td></tr>
+        <tr><td>更换 LLM 模型（如 gpt-4o-mini → gpt-4o）</td><td>🔺 Faithfulness + Answer Relevancy</td></tr>
+      </table>
+      <p class="small">把这当作你的 RAG 调试仪表盘——每次改动只需要跑一次 <code>python eval_pipeline.py</code>，就知道是变好了还是变差了。</p>
+    </div>
+  </section>
+
+  <section>
+    <h2>第三步：理解 LLM-as-a-Judge 的局限</h2>
+    <p>LLM-as-a-Judge 很强大，但它不是银弹。理解它的局限比理解它的用法更重要——否则你可能会被漂亮的评分报告欺骗。</p>
+
+    <h3>已知的偏差</h3>
+    <table>
+      <tr><th>偏差类型</th><th>表现</th><th>缓解方式</th></tr>
+      <tr>
+        <td><strong>位置偏差</strong></td>
+        <td>审判模型倾向于给排在"第一个"或"最后一个"的答案更高分</td>
+        <td>多次评估不同顺序后取平均；交换上下文顺序再测</td>
+      </tr>
+      <tr>
+        <td><strong>自我强化偏差</strong></td>
+        <td>审判模型更倾向于推荐与自己同族的模型生成的答案（如 GPT-4 评分给 GPT-4 生成的高分）</td>
+        <td>使用不同家族的模型做审判（如用 Claude 评估 GPT，或反之）</td>
+      </tr>
+      <tr>
+        <td><strong>长度偏差</strong></td>
+        <td>越长的答案通常被认为越"好"，即使包含很多废话</td>
+        <td>在 prompt 中明确要求扣分项："如果答案包含冗余信息请扣分"</td>
+      </tr>
+      <tr>
+        <td><strong>讨好偏差</strong></td>
+        <td>模型倾向于说"YES"以免冒犯用户</td>
+        <td>temperature=0 + 明确的评分标准 + chain-of-thought 推理</td>
+      </tr>
+    </table>
+
+    <div class="panel warn">
+      <h3>不要犯这个经典错误</h3>
+      <p>新手最容易犯的错误是：<strong>用 GPT-4 给 GPT-4 的答案打分，得到一个漂亮的分数，然后觉得自己的系统已经很好了。</strong></p>
+      <p>实际上，GPT-4 作为审判者给 GPT-4 作为生成者的答案打分，存在严重的自我强化偏差——分数可能虚高 10-20%。正确做法：</p>
+      <ol>
+        <li>尽量使用不同的模型族（生成用 gpt-4o-mini，审判用 Claude Haiku）</li>
+        <li>定期加入"黄金标准答案"人类打分作为校准</li>
+        <li>绝对不要只依赖一次评估的结果——如果分数变动 < 0.05，基本是噪声</li>
+      </ol>
+    </div>
+
+    <h3>什么时候应该用人工评估？</h3>
+    <p>LLM 评估永远无法完全替代人工评估。以下情况下你<strong>必须</strong>引入人工：</p>
+    <ul>
+      <li><strong>上线前的最终验收</strong>：在把系统发布给真实用户之前，至少人工审核 20-30 条有代表性的测试样本</li>
+      <li><strong>发现 Faithfulness < 0.7 但看不出来</strong>：LLM 判断"不忠实"但你不理解为什么——说明存在微妙的幻觉问题</li>
+      <li><strong>领域术语评估</strong>：如果一个句子涉及专业领域的判断，LLM 可能不如领域专家可靠</li>
+      <li><strong>评估指标在调整</strong>：当你新加了评估指标需要验证其有效性时</li>
+    </ul>
+
+    <div class="panel info">
+      <h3>推荐成本模型</h3>
+      <p>假设你有一个 20 条查询的 golden dataset，每条评估四个指标：</p>
+      <ul>
+        <li><strong>每次端到端评估（gpt-4o-mini）</strong>：约 ¥0.05-0.10（20×4次LLM调用）</li>
+        <li><strong>每次端到端评估（gpt-4o）</strong>：约 ¥1.0-2.0</li>
+        <li><strong>每日运行成本</strong>：开发期每天跑 5-10 次，月成本约 ¥30-50（gpt-4o-mini 方案）</li>
+      </ul>
+      <p>这是整个 RAG 系统优化中<strong>回报率最高的成本</strong>——没有之一。没有评估，你所有优化都是盲目的。</p>
+    </div>
+  </section>
+
+  <section>
+    <h2>交互式测验</h2>
+    <p>来检验一下你理解了多少。点击选项看反馈。</p>
+
+    <div class="panel">
+      <h3>问题 1</h3>
+      <p>你的 RAG 系统检索质量很好（Recall@5=0.95），但用户反馈"给的答案总是不对"。你首先应该查看哪个指标？</p>
+      <div class="quiz" id="q1">
+        <button onclick="answerQ('q1',0)">A. Context Precision（上下文精确度）</button>
+        <button onclick="answerQ('q1',1)">B. Faithfulness（忠实度）</button>
+        <button onclick="answerQ('q1',2)">C. Context Recall（上下文召回率）</button>
+        <button onclick="answerQ('q1',3)">D. Answer Relevancy（答案相关度）但排在第二位，因为检索质量好通常意味着问题不在检索侧</button>
+      </div>
+      <div class="feedback" id="q1-fb"></div>
+    </div>
+
+    <div class="panel">
+      <h3>问题 2</h3>
+      <p>你的 Faithfulness 分数从 0.92 降到 0.73，但 Context Precision 从 0.65 提升到 0.88。发生了什么？</p>
+      <div class="quiz" id="q2">
+        <button onclick="answerQ('q2',0)">A. 检索变好了，LLM 也更听话了</button>
+        <button onclick="answerQ('q2',1)">B. 检索变好了但 LLM 没跟上（可能是新上下文格式导致 LLM 混淆）</button>
+        <button onclick="answerQ('q2',2)">C. 评估器出错了</button>
+        <button onclick="answerQ('q2',3)">D. 这是不可能的——检索精度提升应该带来 Faithfulness 提升</button>
+      </div>
+      <div class="feedback" id="q2-fb"></div>
+    </div>
+
+    <div class="panel">
+      <h3>问题 3</h3>
+      <p>以下哪种方法最能缓解 LLM-as-a-Judge 的自我强化偏差？</p>
+      <div class="quiz" id="q3">
+        <button onclick="answerQ('q3',0)">A. 提高 temperature 让审判模型更有创造力</button>
+        <button onclick="answerQ('q3',1)">B. 用同一个模型生成答案和评分以保持一致性</button>
+        <button onclick="answerQ('q3',2)">C. 使用不同模型族的审判模型（如生成用 GPT，审判用 Claude）</button>
+        <button onclick="answerQ('q3',3)">D. 只使用人工评估</button>
+      </div>
+      <div class="feedback" id="q3-fb"></div>
+    </div>
+
+    <div class="panel">
+      <h3>问题 4</h3>
+      <p>Context Recall 和 Recall@K 的区别是什么？</p>
+      <div class="quiz" id="q4">
+        <button onclick="answerQ('q4',0)">A. 没有区别，只是叫法不同</button>
+        <button onclick="answerQ('q4',1)">B. Recall@K 评估检索是否找对了 chunk，Context Recall 评估上下文是否包含回答所需的信息</button>
+        <button onclick="answerQ('q4',2)">C. Context Recall 是 Recall@K 的升级版，用 LLM 替代人工标注</button>
+        <button onclick="answerQ('q4',3)">D. Recall@K 用于生成侧，Context Recall 用于检索侧</button>
+      </div>
+      <div class="feedback" id="q4-fb"></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>练习题</h2>
+    <p>现在该你动手了。花 15-20 分钟完成以下练习：</p>
+
+    <div class="task">
+      <h3>练习 1：运行你的第一个端到端评估</h3>
+      <ol>
+        <li>将上文完整的 <code>answer_evaluator.py</code> 保存到你的项目目录</li>
+        <li>编写一个简单的测试脚本，准备 3 条测试查询、对应的检索结果、答案</li>
+        <li>调用 <code>full_evaluate()</code> 对每条查询运行全部四个指标</li>
+        <li>观察输出结果，检查是否有异常</li>
+      </ol>
+    </div>
+
+    <div class="task">
+      <h3>练习 2：故意制造一个低 Faithfulness 的案例</h3>
+      <ol>
+        <li>准备一段上下文（如你的产品退货政策）</li>
+        <li>写一个答案，故意编造上下文没有的信息（说"退货免运费"但政策说"客户承担运费"）</li>
+        <li>运行 Faithfulness 评估，确认它检测到了这个幻觉</li>
+        <li>修改答案使其忠实于上下文，再次运行，确认分数提升了</li>
+      </ol>
+    </div>
+
+    <div class="task">
+      <h3>练习 3：对比实验——加 Re-ranking 前后</h3>
+      <ol>
+        <li>使用你的 golden dataset（来自第 4 课），对其中 5 条查询</li>
+        <li>先跑一次端到端评估（纯向量检索）</li>
+        <li>加上重排序（Cross-Encoder re-ranking，第 4 课）</li>
+        <li>再跑一次评估</li>
+        <li>对比 Context Precision 和 Faithfulness 的变化——重排序应该能提升这两个指标</li>
+      </ol>
+    </div>
+
+    <div class="panel good">
+      <h3>完成后请问自己</h3>
+      <ul>
+        <li>你现在的 RAG 系统的 Faithfulness 大约是多少？你对这个数字满意吗？</li>
+        <li>如果你只有时间修复一个指标，你会选 Faithfulness 还是 Answer Relevancy？为什么？</li>
+        <li>你能想到你的系统在什么场景下会给出低 Faithfulness 的答案？</li>
+      </ul>
+    </div>
+  </section>
+
+  <section>
+    <h2>生产环境中的答案质量评估</h2>
+    <p>当你的 RAG 系统上线后，离线评估（在 golden dataset 上跑）是不够的。真正的用户流量会暴露你在 golden dataset 中覆盖不到的问题。以下是一些生产环境实践：</p>
+
+    <h3>在线评估 vs 离线评估</h3>
+    <table>
+      <tr><th>维度</th><th>离线评估（本课所教）</th><th>在线评估</th></tr>
+      <tr><td>数据</td><td>人工标注的 golden dataset（20-50 条）</td><td>真实用户查询（可能成千上万条）</td></tr>
+      <tr><td>指标</td><td>Faithfulness, Relevancy, Precision, Recall</td><td>用户满意度、点赞/踩率、对话轮次、放弃率</td></tr>
+      <tr><td>频率</td><td>每次代码/配置变动后</td><td>持续实时监控</td></tr>
+      <tr><td>成本</td><td>中（每个查询 4 次 LLM 调用）</td><td>高（需要采样，不能对所有用户查询跑）</td></tr>
+      <tr><td>主要用途</td><td>开发期调试、发布前验证</td><td>监控退化、发现 edge cases</td></tr>
+    </table>
+
+    <h3>生产环境策略</h3>
+    <ul>
+      <li><strong>采样评估</strong>：对所有用户请求采样 1-5%，异步运行 LLM-as-a-Judge 评估，记录到日志</li>
+      <li><strong>退化告警</strong>：设置 Faithfulness 基线（如 0.85），如果滑动窗口平均值（如最近 1000 条）低于基线则触发告警</li>
+      <li><strong>A/B 测试</strong>：新版本上线时，将部分用户流量导入新版，对比两版的评估指标</li>
+      <li><strong>人工抽检</strong>：每周从低分样本（Faithfulness < 0.6）中随机抽取 10 条，人工确认是否是误判</li>
+      <li><strong>持续更新 golden dataset</strong>：从真实用户反馈中挑出典型的高质量查询，每两周补充到 golden dataset</li>
+    </ul>
+
+    <div class="panel info">
+      <h3>小团队的最佳实践</h3>
+      <p>如果你是独立开发者或小团队：</p>
+      <ol>
+        <li><strong>20 条 golden 就够了</strong>——比没有强 100 倍。不需要追求完美覆盖。</li>
+        <li><strong>优先修 Faithfulness</strong>——一个很少但从不幻觉的系统，比一个经常幻觉偶尔答对的系统更受欢迎。</li>
+        <li><strong>每次改动跑一遍评估</strong>——养成习惯，比任何代码审查都管用。</li>
+        <li><strong>用 gpt-4o-mini 做审判</strong>——成本够低可以频繁跑。</li>
+        <li><strong>两周一次人工抽检</strong>——抽 10 条看你的 LLM 审判和你的判断是否一致。</li>
+      </ol>
+      <p>RAG 系统的质量，归根结底是"你有多频繁地在测量它"。测量驱动优化。</p>
+    </div>
+  </section>
+
+  <section>
+    <h2>从本课到下一课</h2>
+    <p>你现在拥有了完整的 RAG 评估体系：</p>
+    <ul>
+      <li>第 4 课：检索质量评估（Recall@K, MRR）——你的检索系统"检到了吗"</li>
+      <li>第 6 课：答案质量评估（Faithfulness, Relevancy, Precision, Recall）——你的 LLM "答好了吗"</li>
+    </ul>
+    <p>下一步，你应该考虑：当用户的问题无法从知识库中找到答案时，系统应该如何优雅地处理？或者，如何让 RAG 系统处理"需要多轮对话"的复杂查询？</p>
+    <p>可能的下一课主题：《RAG 的拒绝策略与兜底机制》——在你本课的评估中，如果发现大量查询的 Context Precision 或 Context Recall 很低，说明知识库可能缺少相关内容，你需要引入"不知道就说不知道"机制。</p>
+
+    <p class="small" style="margin-top: 30px;">有疑问？随时问我——我会帮你调试评估结果、设计 golden dataset，或者讨论你的具体场景最适合哪些指标组合。本课速查表：<a href="../reference/0006-答案质量评估与RAGAS-cheatsheet.html">答案质量评估与 RAGAS 速查表</a>。</p>
+  </section>
+</main>
+
+<script>
+const ANSWERS = {
+  q1: 1,  // B. Faithfulness（忠实度）
+  q2: 1,  // B. 检索变好了但 LLM 没跟上
+  q3: 2,  // C. 使用不同模型族的审判模型
+  q4: 1,  // B. Recall@K 评估检索是否找对了 chunk，Context Recall 评估上下文是否包含回答所需的信息
+};
+
+const FEEDBACK = {
+  q1: {
+    0: "❌ Context Precision 关注的是检索噪音多少，但这里检索质量已经很好（Recall@5=0.95）。问题出在生成侧。", // A
+    1: "✅ 正确！检索质量好但用户仍不满意，最可能的问题是 LLM 没有忠实于检索到的上下文去生成答案。",
+    2: "❌ Context Recall 关注的是上下文中是否包含了回答所需的信息。如果检索 Recall 已经是 0.95，问题不太可能在检索侧。",
+    3: "❌ 方向对了——问题在生成侧，但最直接的对应指标是 Faithfulness，因为用户说"答案不对"通常指内容错误而非答非所问。", // D
+  },
+  q2: {
+    0: "❌ 如果两者都提升，是好事——但这里 Faithfulness 大幅下降，说明出了问题。",
+    1: "✅ 完全正确！Context Precision 大幅提升说明检索噪音少了，但 Faithfulness 下降说明 LLM 面对"更精炼、但可能格式不同的上下文"时没处理好——很可能新上下文缺少了 LLM 之前依赖的某些格式线索。这是一个经典的反直觉案例。",
+    2: "❌ 有可能是评估器问题（如 prompt 改了），但更合理的解释是 LLM 没适应新的上下文格式。",
+    3: "❌ 这是一个常见误解。检索精度提升≠Faithfulness 提升。如果调整了检索参数导致上下文内容/顺序变了，LLM 可能会"困惑"导致忠实度下降。",
+  },
+  q3: {
+    0: "❌ 提高 temperature 只会让审判结果更不稳定，不会缓解偏差。",
+    1: "❌ 这会加剧自我强化偏差——同族模型倾向于给自己的输出高分。",
+    2: "✅ 正确！使用不同模型族的审判模型（如 GPT 生成 → Claude 审判）是缓解自我强化偏差最实用的方法。",
+    3: "❌ 人工评估是黄金标准，但成本太高无法日常使用。混合策略：日常用不同族 LLM 自动评估，关键节点人工校准。",
+  },
+  q4: {
+    0: "❌ 两者有本质区别，虽然都叫"recall"但评估对象不同。",
+    1: "✅ 完全正确！Recall@K 是检索侧指标（基于人工标注的文档相关性），Context Recall 是 RAG 整体指标（基于 LLM 判断上下文是否包含回答所需信息）。",
+    2: "❌ 它们不是同一个指标的升级关系——它们的标注来源不同（Recall@K 来自人工，Context Recall 来自 LLM），评估对象也不同。",
+    3: "❌ 说反了——Recall@K 用于检索侧，Context Recall 用于评估"检索+生成"整体。",
+  },
+};
+
+function answerQ(qid, choice) {
+  const btns = document.querySelectorAll(`#${qid} button`);
+  btns.forEach((b, i) => {
+    b.classList.remove("selected", "correct", "wrong");
+    if (i === choice) {
+      b.classList.add(i === ANSWERS[qid] ? "correct" : "wrong");
+    }
+    if (i === ANSWERS[qid] && i !== choice) {
+      b.classList.add("correct");
+    }
+  });
+  const fb = document.getElementById(`${qid}-fb`);
+  fb.textContent = FEEDBACK[qid][choice] || "";
+}
+</script>
+</body>
+</html>

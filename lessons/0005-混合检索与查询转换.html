@@ -1,0 +1,1022 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>第 5 课：混合检索与查询转换 —— 向量检索的盲区与破局</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink:#172033; --muted:#667085; --line:#d7dde8; --accent:#0f766e;
+      --accent2:#8b5e00; --good:#116329; --bad:#a10e25; --bg:#fbfcfe; --panel:#fff;
+    }
+    * { box-sizing: border-box; }
+    body { margin:0; font-family: ui-serif, Georgia, "Noto Serif SC", serif; color:var(--ink); background:var(--bg); line-height:1.7; }
+    main { max-width: 900px; margin: 0 auto; padding: 42px 22px 70px; }
+    header { margin-bottom: 30px; }
+    .kicker { font: 700 13px/1.2 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color:var(--accent); text-transform: uppercase; letter-spacing: .08em; }
+    h1 { font-size: clamp(32px, 5vw, 54px); line-height:1.08; margin: 10px 0 12px; letter-spacing:0; }
+    h2 { font-size: 23px; margin: 34px 0 12px; padding-bottom: 6px; border-bottom:1px solid var(--line); }
+    h3 { font-size: 18px; margin: 20px 0 8px; }
+    p { margin: 0 0 14px; }
+    a { color:#0b5cad; text-decoration-thickness:1px; text-underline-offset:3px; }
+    .lede { color:var(--muted); max-width:760px; font-size:18px; }
+    .panel { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:18px; margin:16px 0; }
+    .panel.good { border-left:4px solid var(--good); }
+    .panel.warn { border-left:4px solid var(--accent2); }
+    .panel.info { border-left:4px solid var(--accent); }
+    code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    code { background:#eef6f5; padding:2px 5px; border-radius:4px; font-size:0.92em; }
+    pre { overflow:auto; background:#f6f8fa; color:var(--ink); border:1px solid var(--line); border-radius:8px; padding:16px; font-size:14px; line-height:1.55; }
+    .small { color:var(--muted); font-size:14px; }
+    .quiz { display:grid; gap:10px; margin-top:12px; }
+    button { border:1px solid var(--line); background:#fff; border-radius:8px; padding:11px 13px; text-align:left; font:600 15px/1.35 ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif; color:var(--ink); cursor:pointer; }
+    button:hover { border-color:var(--accent); }
+    button.selected { border-color:var(--accent); background:#eef6f5; }
+    button.correct { border-color:var(--good); background:#edf8ef; color:var(--good); }
+    button.wrong { border-color:var(--bad); background:#fff0f2; color:var(--bad); }
+    .feedback { min-height:26px; font-weight:700; margin-top:8px; }
+    .task { border-left:4px solid var(--accent2); padding-left:14px; }
+    table { border-collapse:collapse; width:100%; margin:14px 0; }
+    th, td { border:1px solid var(--line); padding:8px 12px; text-align:left; font-size:15px; }
+    th { background:#f6f8fa; font-weight:700; }
+    ul, ol { padding-left:22px; }
+    .combo { display:grid; grid-template-columns: 1fr 1fr; gap:14px; margin:16px 0; }
+    .flow { display:flex; align-items:center; gap:8px; flex-wrap:wrap; justify-content:center; margin:16px 0; }
+    .flow-box { border:1px solid var(--line); border-radius:6px; padding:8px 14px; background:var(--panel); font-size:14px; text-align:center; }
+    .flow-arrow { font-size:20px; color:var(--muted); }
+    .switch { font:600 14px/1.3 ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif; border:1px solid var(--line); border-radius:8px; padding:6px 12px; background:var(--panel); cursor:pointer; transition:background .15s; }
+    .switch:hover { background:#edf8ef; }
+    .switch.on { background:var(--good); color:#fff; border-color:var(--good); }
+    @media (max-width: 640px) { .combo { grid-template-columns: 1fr; } }
+    @media print { body { background:white; } main { max-width:none; padding:20mm; } .panel { break-inside: avoid; } button { border-color:#aaa; } }
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <div class="kicker">Lesson 0005</div>
+    <h1>混合检索与查询转换：向量检索的盲区与破局</h1>
+    <p class="lede">本课目标：掌握混合检索（Vector + BM25）和查询转换（Query Transformation）两大技术，让 RAG 系统既能理解语义、又能精确匹配关键词，覆盖更广泛的企业查询场景。</p>
+  </header>
+
+  <section>
+    <h2>你今天要获得的能力</h2>
+    <p>学完本课，你将拥有：</p>
+    <ul>
+      <li>一个 <strong>bm25_retriever.py</strong> 模块，实现纯关键词检索（BM25）</li>
+      <li>一个 <strong>hybrid_retriever.py</strong> 模块，将向量检索与 BM25 通过 RRF（Reciprocal Rank Fusion）融合为统一排序</li>
+      <li>一个 <strong>query_processor.py</strong> 模块，实现三种查询转换策略：多查询扩展（Multi-Query）、查询重写（Query Rewrite）、HyDE（假想文档嵌入）</li>
+      <li>一套与第 4 课评估器无缝对接的测试方法，定量对比"纯向量""纯 BM25""混合检索""混合+查询转换"四种配置的效果</li>
+    </ul>
+    <p>这是你的 RAG 从"语义检索"到"全场景检索"的关键升级——不仅懂语义，还能精确匹配订单号、SKU、型号这些企业查询的常见痛点。</p>
+    <p class="small">推荐阅读：<a href="https://github.com/dorianbrown/rank_bm25">Rank-BM25 库</a>、<a href="https://arxiv.org/abs/2212.10496">HyDE 论文</a>、<a href="https://arxiv.org/abs/2305.03653">Query Expansion 论文</a>。回顾上一课：<a href="0004-检索评估与重排序.html">第 4 课：检索评估与重排序</a>。速查表：<a href="../reference/0005-混合检索与查询转换-cheatsheet.html">混合检索与查询转换速查表</a>。</p>
+  </section>
+
+  <section>
+    <h2>向量检索的盲区</h2>
+
+    <p>你的 RAG 系统已经能用 embedding 做语义检索了——问"退货政策是什么"能准确找到退货相关的 chunk。这很强大，但当你部署到真实客服场景时，你会发现一条让人沮丧的规律：</p>
+
+    <div class="panel warn">
+      <h3>现实中的"长尾问题"往往不是语义问题</h3>
+      <p>实际客服日志中，大量查询根本不是"理解语义"的问题，而是<strong>精确匹配</strong>的问题：</p>
+      <ul>
+        <li><strong>"订单号 SK20240615 现在什么状态？"</strong>——需要精确匹配"SK20240615"</li>
+        <li><strong>"iPhone 14 Pro 的充电头是多少瓦的？"</strong>——需要精确匹配型号"iPhone 14 Pro"</li>
+        <li><strong>"SD-200 和 SD-300 有什么区别？"</strong>——需要区分两个非常相似的型号</li>
+        <li><strong>"我的发票代码 3701256712 查不到"</strong>——需要精确匹配发票编号</li>
+      </ul>
+      <p>这些查询中，embedding 模型的<strong>分词（tokenization）会把"SK20240615"切成多个子词</strong>，向量化后丢失了精确匹配信息。而 BM25 这样的关键词方法可以完美匹配——因为它不依赖语义理解，只看词频。</p>
+    </div>
+
+    <p>这里的核心洞察是：<strong>语义检索和关键词检索不是"谁替代谁"的关系，而是互补的</strong>。它们各自擅长不同的查询类型：</p>
+
+    <table>
+      <tr><th>查询类型</th><th>举例</th><th>向量检索</th><th>关键词检索 (BM25)</th></tr>
+      <tr><td>语义理解型</td><td>"退货要什么条件"</td><td>⭐⭐⭐⭐</td><td>⭐⭐</td></tr>
+      <tr><td>精确匹配型</td><td>"订单号 SK20240615"</td><td>⭐⭐</td><td>⭐⭐⭐⭐⭐</td></tr>
+      <tr><td>近义词型</td><td>文档写"运费"用户问"邮费"</td><td>⭐⭐⭐⭐</td><td>⭐⭐</td></tr>
+      <tr><td>型号区分型</td><td>"SD-200 vs SD-300"</td><td>⭐⭐⭐</td><td>⭐⭐⭐⭐</td></tr>
+      <tr><td>概括性问题</td><td>"有哪些支付方式"</td><td>⭐⭐⭐⭐</td><td>⭐⭐⭐</td></tr>
+      <tr><td>罕见缩略词</td><td>"WMS 入库流程"</td><td>⭐⭐</td><td>⭐⭐⭐⭐</td></tr>
+    </table>
+
+    <p>理想的 RAG 系统应该<strong>同时拥有</strong>两种能力——先用两种方法各自检索，再把结果融合。这就是<strong>混合检索（Hybrid Search）</strong>。</p>
+  </section>
+
+  <section>
+    <h2>第一步：理解 BM25——从 TF-IDF 到现代关键词检索</h2>
+
+    <h3>BM25 的核心直觉</h3>
+    <p>BM25（Best Matching 25）是关键词检索的行业标准。它评估文档和查询匹配程度的方式基于三条直觉：</p>
+    <ol>
+      <li><strong>词频（TF）收益递减</strong>：一个词在第一篇文档中出现 10 次的匹配度，不是出现 1 次的 10 倍——而是趋近饱和（log 增长）。BM25 用参数 <code>k1</code> 控制这个饱和度。</li>
+      <li><strong>逆文档频率（IDF）</strong>：在所有文档中都出现的词（如"的"、"是"）几乎没有区分度。BM25 给罕见的词更高的权重。</li>
+      <li><strong>文档长度归一化</strong>：长的文档天然包含更多词、有更高的匹配概率。BM25 用参数 <code>b</code> 惩罚过长的文档，防止长文档总是排在前面。</li>
+    </ol>
+
+    <div class="panel info">
+      <h3>BM25 的经典公式</h3>
+      <pre><code>Score(D, Q) = Σ [ IDF(q_i) × TF(q_i, D) × (k1 + 1) / (TF(q_i, D) + k1 × (1 - b + b × |D|/avgdl)) ]
+
+  其中：
+  - q_i        = 查询中的第 i 个词
+  - TF(q_i,D)  = 该词在文档 D 中的出现次数
+  - |D|        = 文档 D 的长度（词数）
+  - avgdl      = 所有文档的平均长度
+  - k1         = 词频饱和度控制（默认 1.2-2.0，越大越"容许多次出现"）
+  - b          = 长度归一化强度（默认 0.75，0=不惩罚长文档，1=完全惩罚）</code></pre>
+      <p>你不必记住这个公式——rank_bm25 库已经帮你实现了。但理解这三个直觉可以帮助你调参。</p>
+    </div>
+
+    <h3>安装与基本用法</h3>
+    <pre><code>pip install rank-bm25</code></pre>
+
+    <pre><code>"""bm25_retriever.py — BM25 关键词检索模块"""
+import jieba  # 中文分词
+from rank_bm25 import BM25Okapi
+from typing import Any
+import json
+import os
+
+
+class BM25Retriever:
+    """基于 BM25 的关键词检索器，支持中文分词。"""
+
+    def __init__(self, k1: float = 1.5, b: float = 0.75):
+        self.k1 = k1
+        self.b = b
+        self.bm25 = None
+        self.documents: list[dict] = []   # 原始文档列表
+        self.corpus: list[str] = []        # 纯文本列表（用于 BM25 索引）
+
+    def _tokenize(self, text: str) -> list[str]:
+        """中文分词，返回词列表。"""
+        return list(jieba.cut(text))
+
+    def build_index(self, documents: list[dict]) -> None:
+        """
+        构建 BM25 倒排索引。
+
+        documents: [{"id": "...", "text": "...", "metadata": {...}}, ...]
+        """
+        self.documents = documents
+        self.corpus = [doc["text"] for doc in documents]
+
+        # 对每篇文档做分词
+        tokenized_corpus = [self._tokenize(text) for text in self.corpus]
+
+        # 构建 BM25 索引
+        self.bm25 = BM25Okapi(tokenized_corpus, k1=self.k1, b=self.b)
+
+    def retrieve(self, query: str, top_k: int = 10) -> list[dict]:
+        """检索并返回 top-k 结果。"""
+        if self.bm25 is None:
+            raise RuntimeError("请先调用 build_index() 构建索引。")
+
+        tokenized_query = self._tokenize(query)
+        scores = self.bm25.get_scores(tokenized_query)
+
+        # 按分数排序，取 top-k
+        ranked_indices = sorted(
+            range(len(scores)),
+            key=lambda i: scores[i],
+            reverse=True,
+        )[:top_k]
+
+        results = []
+        for idx in ranked_indices:
+            results.append({
+                "id": self.documents[idx]["id"],
+                "text": self.documents[idx]["text"],
+                "score": float(scores[idx]),
+                "retriever": "bm25",
+            })
+        return results
+
+    def save_index(self, path: str) -> None:
+        """保存索引到磁盘（保存文档列表，重建时重新分词建索引）。"""
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump({"documents": self.documents, "k1": self.k1, "b": self.b}, f, ensure_ascii=False)
+
+    @classmethod
+    def load_index(cls, path: str) -> "BM25Retriever":
+        """从磁盘加载索引。"""
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        retriever = cls(k1=data["k1"], b=data["b"])
+        retriever.build_index(data["documents"])
+        return retriever
+
+
+# 快速测试
+if __name__ == "__main__":
+    docs = [
+        {"id": "return-0", "text": "7 天无理由退货仅适用于未拆封商品。"},
+        {"id": "return-1", "text": "已拆封但存在质量问题的商品，可在签收后 15 天内申请售后检测。"},
+        {"id": "shipping-0", "text": "运费标准：订单满 99 元包邮，不满 99 元收取 10 元运费。"},
+        {"id": "sku-0", "text": "SK20240615 订单目前状态为：已发货，预计 3-5 个工作日送达。"},
+        {"id": "invoice-0", "text": "发票代码 3701256712 的发票已开具，可登录官网下载。"},
+    ]
+
+    bm25 = BM25Retriever(k1=1.5, b=0.75)
+    bm25.build_index(docs)
+
+    tests = [
+        "SK20240615 订单状态",
+        "包邮条件是什么",
+        "3701256712 发票",
+    ]
+    for q in tests:
+        print(f"\n查询：{q}")
+        for r in bm25.retrieve(q, top_k=2):
+            print(f"  [{r['score']:.2f}] {r['id']}: {r['text'][:40]}")</code></pre>
+
+    <div class="panel good">
+      <h3>为什么用 jieba 分词？</h3>
+      <p>BM25 是<strong>词级（token-level）</strong>的匹配算法。英文天然按空格分词，但中文需要分词器。我们用 <code>jieba</code> 做基础中文分词。如果是纯英文场景，直接用 <code>.split()</code> 即可。</p>
+      <p>注意：分词质量直接影响 BM25 的检索效果。"订单号 SK20240615"如果被切成"订单号" + "SK" + "20240615"，用户查"SK20240615"时仍然能匹配到。但如果分词把"SK20240615"当作一个整体切不出来，就需要自定义词典——企业场景中，维护 SKU/型号/地名的自定义词典是好的实践。</p>
+    </div>
+  </section>
+
+  <section>
+    <h2>第二步：混合检索——用 RRF 融合两种排序</h2>
+
+    <p>有了向量检索（第 2 课）和 BM25 关键词检索（刚才写的），现在的问题是：<strong>如何把两个独立的排序结果融合成一个统一的排序？</strong></p>
+
+    <p>直接比较分数行不通——向量检索的分数（cosine similarity）范围是 [-1, 1]，而 BM25 的分数范围没有上界（可能 0-50+）。它们的分布完全不同，不能直接相加。</p>
+
+    <h3>RRF（Reciprocal Rank Fusion）——简单的排名融合策略</h3>
+    <p>RRF 的设计非常优雅：它不看分数，只看排名。基本思想是：<strong>如果一个文档在多个排序器中的排名都比较靠前，它就应该排在最终结果的前面。</strong></p>
+
+    <pre><code>RRF Score(d) = Σ( 1 / (k + rank_r(d)) )
+
+  其中：
+  - rank_r(d) = 文档 d 在第 r 个排序器中的排名（从 1 开始）
+  - k         = 常数（默认 60，控制排名靠后的文档的"保底分"）
+
+  直觉：排第 1 → 贡献 1/61 ≈ 0.0164
+        排第 10 → 贡献 1/70 ≈ 0.0143
+        排第 60 → 贡献 1/120 ≈ 0.0083
+        差异不大
+        排第 1 vs 排第 10 只差 0.0021——RFF 不"过度惩罚"排名靠后的文档</code></pre>
+
+    <p>在 RRF 中，文档即使在一个排序器中排名靠后，只要在另一个排序器中排名极高，仍然有机会排到前面。这一点对混合检索至关重要——因为一个查询可能适合向量检索，也可能适合 BM25，我们不知道哪个排序器会表现更好。</p>
+
+    <pre><code>"""hybrid_retriever.py — 向量 + BM25 混合检索器"""
+from typing import Callable
+import numpy as np
+
+
+class HybridRetriever:
+    """
+    双路召回 + RRF 融合排序。
+
+    使用方式：
+    hybrid = HybridRetriever(vector_retriever, bm25_retriever)
+    hybrid.retrieve(query)  # 自动双路召回 → RRF 融合
+    """
+
+    def __init__(
+        self,
+        vector_retriever: Callable | None = None,
+        bm25_retriever: Callable | None = None,
+        rrf_k: int = 60,
+        weights: tuple[float, float] = (1.0, 1.0),
+        top_k_retrieve: int = 20,
+        top_k_final: int = 5,
+    ):
+        """
+        vector_retriever: 接收 query 返回 [{"id":..., "score":...}, ...]
+        bm25_retriever:   同上
+        rrf_k:            RRF 常数 k（默认 60）
+        weights:          两个检索器的加权系数 (w_vector, w_bm25)
+        top_k_retrieve:   每个检索器召回多少条
+        top_k_final:      融合后最终保留多少条
+        """
+        self.vector_retriever = vector_retriever
+        self.bm25_retriever = bm25_retriever
+        self.rrf_k = rrf_k
+        self.weights = weights
+        self.top_k_retrieve = top_k_retrieve
+        self.top_k_final = top_k_final
+
+    def _rrf_score(self, rank: int) -> float:
+        """计算单个排名的 RRF 贡献。"""
+        return 1.0 / (self.rrf_k + rank)
+
+    def retrieve(self, query: str) -> list[dict]:
+        """双路召回 → RRF 融合 → 返回 top_k_final。"""
+        # 收集所有候选文档（用 dict 按 id 去重）
+        candidates: dict[str, dict] = {}
+        debug_info = {}
+
+        # 1. 向量检索
+        if self.vector_retriever:
+            vec_results = self.vector_retriever(query, top_k=self.top_k_retrieve)
+            for i, doc in enumerate(vec_results):
+                doc_id = doc["id"]
+                if doc_id not in candidates:
+                    candidates[doc_id] = {
+                        "id": doc_id,
+                        "text": doc.get("text", ""),
+                        "rrf_score": 0.0,
+                        "vector_rank": None,
+                        "bm25_rank": None,
+                        "vector_score": doc.get("score", 0.0),
+                        "bm25_score": None,
+                    }
+                candidates[doc_id]["vector_rank"] = i + 1
+                candidates[doc_id]["rrf_score"] += (
+                    self.weights[0] * self._rrf_score(i + 1)
+                )
+            debug_info["vector_count"] = len(vec_results)
+            debug_info["vector_query_time"] = "ok"
+
+        # 2. BM25 检索
+        if self.bm25_retriever:
+            bm25_results = self.bm25_retriever(query, top_k=self.top_k_retrieve)
+            for i, doc in enumerate(bm25_results):
+                doc_id = doc["id"]
+                if doc_id not in candidates:
+                    candidates[doc_id] = {
+                        "id": doc_id,
+                        "text": doc.get("text", ""),
+                        "rrf_score": 0.0,
+                        "vector_rank": None,
+                        "bm25_rank": None,
+                        "vector_score": None,
+                        "bm25_score": 0.0,
+                    }
+                candidates[doc_id]["bm25_rank"] = i + 1
+                candidates[doc_id]["bm25_score"] = doc.get("score", 0.0)
+                candidates[doc_id]["rrf_score"] += (
+                    self.weights[1] * self._rrf_score(i + 1)
+                )
+            debug_info["bm25_count"] = len(bm25_results)
+
+        # 3. 按 RRF 分数排序取 top_k_final
+        ranked = sorted(
+            candidates.values(),
+            key=lambda d: d["rrf_score"],
+            reverse=True,
+        )[:self.top_k_final]
+
+        result = {
+            "results": ranked,
+            "debug": debug_info,
+        }
+        return result
+
+
+# 快速测试
+if __name__ == "__main__":
+    # mock: 模拟两个检索器
+    def mock_vector(query: str, top_k: int = 10) -> list[dict]:
+        # 模拟向量检索偏好语义匹配
+        all_docs = [
+            {"id": "return-0", "text": "7 天无理由退货仅适用于未拆封商品。", "score": 0.85},
+            {"id": "invoice-0", "text": "发票已开具，可登录官网下载。", "score": 0.72},
+            {"id": "return-1", "text": "已拆封质量问题可在 15 天内售后。", "score": 0.68},
+            {"id": "sku-0", "text": "SK20240615 已发货。", "score": 0.45},
+            {"id": "shipping-0", "text": "满 99 包邮。", "score": 0.42},
+        ]
+        return all_docs[:top_k]
+
+    def mock_bm25(query: str, top_k: int = 10) -> list[dict]:
+        # 模拟 BM25 偏好精确匹配
+        all_docs = [
+            {"id": "sku-0", "text": "SK20240615 已发货。", "score": 12.5},
+            {"id": "return-1", "text": "已拆封质量问题可在 15 天内售后。", "score": 5.2},
+            {"id": "shipping-0", "text": "满 99 包邮。", "score": 4.1},
+            {"id": "return-0", "text": "7 天无理由退货仅适用于未拆封商品。", "score": 3.8},
+            {"id": "invoice-0", "text": "发票已开具，可登录官网下载。", "score": 2.1},
+        ]
+        return all_docs[:top_k]
+
+    hybrid = HybridRetriever(
+        vector_retriever=mock_vector,
+        bm25_retriever=mock_bm25,
+        rrf_k=60,
+        top_k_retrieve=5,
+        top_k_final=3,
+    )
+
+    print("混合检索结果（双路召回 + RRF 融合）：")
+    result = hybrid.retrieve("SK20240615 什么时候到")
+    print(f"  向量数: {result['debug']['vector_count']}, BM25 数: {result['debug']['bm25_count']}")
+    print(f"  {'排名':>4s} {'文档':>12s} {'RRF分':>8s} {'向量排名':>8s} {'BM25排名':>8s}")
+    print(f"  {'-'*44}")
+    for i, doc in enumerate(result["results"]):
+        vr = f"#{doc['vector_rank']}" if doc["vector_rank"] else "-"
+        br = f"#{doc['bm25_rank']}" if doc["bm25_rank"] else "-"
+        print(f"  {i+1:>4d} {doc['id']:>12s} {doc['rrf_score']:>8.4f} {vr:>8s} {br:>8s}")</code></pre>
+
+    <div class="panel info">
+      <h3>RRF vs 其他融合方法</h3>
+      <table>
+        <tr><th>方法</th><th>策略</th><th>优点</th><th>缺点</th></tr>
+        <tr><td><strong>RRF</strong></td><td>基于排名的融合</td><td>无需归一化分数；对异构排序器效果好；鲁棒</td><td>忽视分数的绝对值差异（如第一名远优于第二名时）</td></tr>
+        <tr><td>Score Norm</td><td>将分数归一化到 [0,1] 后加权平均</td><td>保留了分数的相对差异</td><td>需要了解分数分布；异常值会扭曲归一化</td></tr>
+        <tr><td>重排序器融合</td><td>把两路 top-N 合并去重后，用 Cross-Encoder 重排序</td><td>最精准</td><td>最慢；需要额外模型推理</td></tr>
+      </table>
+      <p>在初版实现中，使用 <strong>RRF</strong> 是最好的选择——无参数调优负担、对各种分数分布都鲁棒、且与第 4 课的重排序器完全兼容（你可以先用 RRF 融合，再用 Cross-Encoder 重排序：RRF → Re-rank → top-3）。</p>
+    </div>
+  </section>
+
+  <section>
+    <h2>第三步：查询转换——在检索之前优化查询</h2>
+
+    <p>混合检索解决了"用两种方法检索同一查询"的问题。但有时，<strong>查询本身的质量</strong>才是瓶颈——用户的原始查询可能太短、模糊、或用词不精确。在检索之前<strong>对查询进行转换（Query Transformation）</strong>，可以让系统同时克服语义检索和关键词检索的局限性。</p>
+
+    <p>本课介绍三种实战中效果最好的查询转换技术：</p>
+
+    <div class="combo">
+      <div class="panel">
+        <h3>🔀 多查询扩展<br>（Multi-Query）</h3>
+        <p>用 LLM 把一条查询扩展成 3-5 条语义相似但表达不同的查询。对每条变体都做检索，然后融合结果。</p>
+        <p><strong>效果最佳场景</strong>：用户查询非常短（1-3 个词），如"退货"→扩展出"退货政策""退货流程""退货条件"。</p>
+      </div>
+      <div class="panel">
+        <h3>✏️ 查询重写<br>（Query Rewrite）</h3>
+        <p>将用户的原始查询重写为更精确、更规范的版本。通常用于纠正含义不清的口语化表达。</p>
+        <p><strong>效果最佳场景</strong>：口语化查询，如"我买了个手机拆了能退吗"→重写为"拆封商品的无理由退货政策是什么"。</p>
+      </div>
+      <div class="panel">
+        <h3>🖼️ HyDE<br>（假想文档嵌入）</h3>
+        <p>先用 LLM 根据查询生成一段"假想的正确答案"（Hypothetical Document），然后用这段假想文档的 embedding 去做检索，而不是用原始查询。</p>
+        <p><strong>效果最佳场景</strong>：用户查询很模糊时，生成一个具体的假想答案，embedding 效果远好于短查询嵌入。</p>
+      </div>
+    </div>
+
+    <pre><code>"""query_processor.py — 查询转换模块"""
+
+from typing import Any
+import openai
+import hashlib
+import json
+
+
+class QueryProcessor:
+    """
+    查询转换处理器。提供三种策略：
+
+    1. multi_query: 将一条查询扩展成多条变体，分别检索后融合
+    2. rewrite:     将口语化查询重写为规范版本
+    3. hyde:        先生成假想文档，再以假想文档为查询去检索
+    """
+
+    def __init__(
+        self,
+        model: str = "gpt-4o-mini",
+        temperature: float = 0.0,
+    ):
+        self.model = model
+        self.temperature = temperature
+
+    def _call_llm(self, system: str, user: str) -> str:
+        """调用 LLM 的辅助方法。"""
+        response = openai.chat.completions.create(
+            model=self.model,
+            temperature=self.temperature,
+            messages=[
+                {"role": "system", "content": system},
+                {"role": "user", "content": user},
+            ],
+        )
+        return response.choices[0].message.content.strip()
+
+    # ---- 策略 1：多查询扩展 ----
+
+    MULTI_QUERY_SYSTEM = (
+        "你是一个专注于知识库检索的 AI 助手。请将用户的原始问题改写为 "
+        "3 到 5 个不同的变体，每个变体都要保留原问题的核心意图，但使用"
+        "不同的措辞和句式。每行一个查询，不要编号。"
+    )
+
+    def multi_query(self, query: str, n_variants: int = 4) -> list[str]:
+        """
+        将一条查询扩展成多条语义相似的变体。
+
+        返回: [原始查询 + n 条变体] 的列表
+        """
+        prompt = (
+            f"请将以下问题改写为 {n_variants} 个不同措辞的变体。\n"
+            f"每个变体一行，不要编号。\n\n"
+            f"原始问题：{query}"
+        )
+        result = self._call_llm(self.MULTI_QUERY_SYSTEM, prompt)
+
+        # 解析结果（每行一个变体）
+        variants = [line.strip() for line in result.split("\n") if line.strip()]
+        all_queries = [query] + variants[:n_variants]
+        return all_queries
+
+    def multi_query_retrieve(
+        self,
+        query: str,
+        retrieve_fn: callable,
+        top_k_per_query: int = 5,
+        top_k_final: int = 10,
+    ) -> list[dict]:
+        """
+        多查询扩展 → 各自检索 → RRF 融合。
+
+        retrieve_fn(query) 返回 [{"id":..., "score":...}, ...]
+        """
+        variants = self.multi_query(query)
+
+        # 每条变体检索
+        all_results: dict[str, dict] = {}
+        for i, vq in enumerate(variants):
+            results = retrieve_fn(vq, top_k=top_k_per_query)
+            for j, doc in enumerate(results):
+                doc_id = doc["id"]
+                if doc_id not in all_results:
+                    all_results[doc_id] = {
+                        "id": doc_id,
+                        "text": doc.get("text", ""),
+                        "rrf_score": 0.0,
+                        "matched_variants": 0,
+                    }
+                # 使用 RRF 融合不同变体的结果（k=60）
+                rrf_contrib = 1.0 / (60 + j + 1)
+                all_results[doc_id]["rrf_score"] += rrf_contrib
+                all_results[doc_id]["matched_variants"] += 1
+
+        # 按 RRF 排序
+        ranked = sorted(
+            all_results.values(),
+            key=lambda d: d["rrf_score"],
+            reverse=True,
+        )[:top_k_final]
+
+        return ranked
+
+    # ---- 策略 2：查询重写 ----
+
+    REWRITE_SYSTEM = (
+        "你是一个检索优化助手。请将用户的查询重写为更适合知识库检索"
+        "的规范表述。要求：\n"
+        "1. 保持核心意图不变\n"
+        "2. 将口语化表达转为书面语\n"
+        "3. 补充隐含的上下文信息\n"
+        "4. 直接返回重写后的查询，不要解释"
+    )
+
+    def rewrite(self, query: str) -> str:
+        """将口语化查询重写为规范版本。"""
+        return self._call_llm(self.REWRITE_SYSTEM, f"原始查询：{query}")
+
+    # ---- 策略 3：HyDE —— 假想文档嵌入 ----
+
+    HYDE_SYSTEM = (
+        "你是一个知识库问答助手。请根据用户的查询，生成一段可能存在于"
+        "知识库中的"假想文档"片段。这段文字应该像知识库中的真实文档一样"
+        "包含具体的政策、数据或说明，直接回答问题。不需要提"根据知识库"或"
+        "假想"等词语。"
+    )
+
+    def hyde(self, query: str) -> str:
+        """生成假想文档（Hypothetical Document）。"""
+        return self._call_llm(self.HYDE_SYSTEM, f"问题：{query}")
+
+    def hyde_retrieve(
+        self,
+        query: str,
+        embed_fn: callable,
+        retrieve_fn: callable,
+        top_k: int = 10,
+    ) -> list[dict]:
+        """
+        HyDE 检索流程：
+        1. 用 LLM 生成假想文档
+        2. 对假想文档做 embedding
+        3. 用假想文档的 embedding 去检索（而不是用原始查询）
+
+        embed_fn(text) 返回向量
+        retrieve_fn(vector, top_k) 返回文档列表
+        """
+        hypothetical_doc = self.hyde(query)
+
+        # 使用假想文档的 embedding 检索
+        hypo_vector = embed_fn(hypothetical_doc)
+        results = retrieve_fn(hypo_vector, top_k=top_k)
+
+        # 标记哪些结果是 HyDE 产生的
+        for r in results:
+            r["retriever"] = "hyde"
+            r["hypothetical_doc"] = hypothetical_doc[:100] + "..."
+
+        return results
+
+
+# 快速测试
+if __name__ == "__main__":
+    qp = QueryProcessor()
+
+    print("=" * 50)
+    print("1. 多查询扩展")
+    variants = qp.multi_query("拆封了能不能退货", n_variants=4)
+    for v in variants:
+        print(f"  · {v}")
+
+    print("\n2. 查询重写")
+    rewritten = qp.rewrite("我买了个手机看拆了但不喜欢能退不")
+    print(f"  原始: 我买了个手机看拆了但不喜欢能退不")
+    print(f"  重写: {rewritten}")
+
+    print("\n3. HyDE 假想文档")
+    hypo = qp.hyde("退货的运费谁承担")
+    print(f"  查询: 退货的运费谁承担")
+    print(f"  假想: {hypo[:120]}...")</code></pre>
+
+    <div class="panel warn">
+      <h3>查询转换的成本与延迟</h3>
+      <p>这三种工具都很有效，但每次转换都需要调用 LLM——这意味着额外的<strong>延迟和成本</strong>：</p>
+      <ul>
+        <li><strong>Multi-Query</strong>：1 次 LLM 调用 + N 次检索（N=变体数）。检索次数翻 3-5 倍，延迟和成本都明显增加。</li>
+        <li><strong>Query Rewrite</strong>：1 次 LLM 调用 + 1 次检索。额外成本最低，推荐总是开启。</li>
+        <li><strong>HyDE</strong>：1 次 LLM 调用 + 1 次 embedding + 1 次检索。适用于短查询或模糊查询，对长查询（用户本身描述得很清楚）没有额外收益。</li>
+      </ul>
+      <p>建议的部署策略：<strong>Query Rewrite 默认开启</strong>（成本最低、收益稳定），对于短查询（&lt; 5 个词）额外启用 Multi-Query，对长查询不做转换。HyDE 作为可选开关，用在已知的高模糊度查询上。</p>
+    </div>
+  </section>
+
+  <section>
+    <h2>第四步：定义适配接口——统一的检索器调用</h2>
+
+    <p>为了让评估器（来自第 4 课）能灵活切换不同的检索配置，我们需要一个<strong>统一的适配层</strong>。这一点至关重要——如果每次跑 A/B 测试都要改代码，你就不会去跑测试。</p>
+
+    <pre><code>"""retrieval_adapter.py — 统一检索接口，方便评估器调用"""
+
+from typing import Any, Callable
+from bm25_retriever import BM25Retriever
+from hybrid_retriever import HybridRetriever
+from query_processor import QueryProcessor
+from demo_v2 import chroma_collection, get_embedding  # 从第 2 课导入
+
+import time
+
+
+def build_chroma_retriever(top_k: int = 20) -> Callable:
+    """返回一个纯向量检索函数（适配评估器格式）。"""
+    def retrieve(query: str, top_k: int = top_k) -> list[dict]:
+        query_vec = get_embedding(query)
+        raw = chroma_collection.query(
+            query_embeddings=[query_vec],
+            n_results=top_k,
+            include=["documents", "metadatas", "distances"],
+        )
+        results = []
+        for i in range(len(raw["ids"][0])):
+            results.append({
+                "id": raw["ids"][0][i],
+                "text": raw["documents"][0][i],
+                "score": float(1 - raw["distances"][0][i]),
+            })
+        return results
+    return retrieve
+
+
+def build_bm25_retriever(bm25: BM25Retriever, top_k: int = 20) -> Callable:
+    """返回一个 BM25 检索函数（适配评估器格式）。"""
+    def retrieve(query: str, top_k: int = top_k) -> list[dict]:
+        return bm25.retrieve(query, top_k=top_k)
+    return retrieve
+
+
+def build_hybrid_retriever(
+    vector_fn: Callable,
+    bm25_fn: Callable,
+    rrf_k: int = 60,
+    top_k_retrieve: int = 20,
+    top_k_final: int = 10,
+) -> Callable:
+    """返回一个混合检索函数（适配评估器格式）。"""
+    hybrid = HybridRetriever(
+        vector_retriever=vector_fn,
+        bm25_retriever=bm25_fn,
+        rrf_k=rrf_k,
+        top_k_retrieve=top_k_retrieve,
+        top_k_final=top_k_final,
+    )
+    def retrieve(query: str, top_k: int = 0) -> list[dict]:
+        # top_k 参数被忽略，用 hybrid 配置的 top_k_final
+        r = hybrid.retrieve(query)
+        return r["results"]
+    return retrieve
+
+
+def build_rewrite_retriever(
+    query_processor: QueryProcessor,
+    inner_retriever: Callable,
+    top_k: int = 10,
+) -> Callable:
+    """返回一个"先重写、再检索"的函数。"""
+    def retrieve(query: str, top_k: int = top_k) -> list[dict]:
+        rewritten = query_processor.rewrite(query)
+        print(f"    [重写] {query} → {rewritten}")
+        return inner_retriever(rewritten, top_k=top_k)
+    return retrieve
+
+
+def run_comparison_eval(evaluator: Callable, golden_path: str = "./golden.json"):
+    """
+    运行四种检索配置的对比评估，打印对比表格。
+
+    需要外部提供：
+    - evaluator.evaluate(retrieve_fn, golden_path) 函数（来自第 4 课）
+    - chroma_collection, get_embedding（来自第 2 课）
+    - BM25Retriever（本课）
+    - QueryProcessor（本课）
+    """
+    # 准备好每一种检索器
+    vector_fn = build_chroma_retriever(top_k=20)
+
+    # 1. 纯向量检索（基线）
+    print("=" * 60)
+    print("配置 A：纯向量检索（Baseline）")
+    r1 = evaluator(vector_fn, golden_path)
+    print_report(r1)
+
+    # 2. 纯 BM25 检索
+    bm25_fn = build_bm25_retriever(bm25, top_k=20)
+    print("\n" + "=" * 60)
+    print("配置 B：纯 BM25 检索")
+    r2 = evaluator(bm25_fn, golden_path)
+    print_report(r2)
+
+    # 3. 混合检索（向量 + BM25 + RRF）
+    hybrid_fn = build_hybrid_retriever(
+        vector_fn, bm25_fn,
+        rrf_k=60, top_k_retrieve=20, top_k_final=10,
+    )
+    print("\n" + "=" * 60)
+    print("配置 C：混合检索（向量 + BM25 + RRF）")
+    r3 = evaluator(hybrid_fn, golden_path)
+    print_report(r3)
+
+    # 4. 混合检索 + 查询重写
+    qp = QueryProcessor()
+    rewrite_hybrid_fn = build_rewrite_retriever(qp, hybrid_fn, top_k=10)
+    print("\n" + "=" * 60)
+    print("配置 D：混合检索 + 查询重写")
+    r4 = evaluator(rewrite_hybrid_fn, golden_path)
+    print_report(r4)
+
+    # 5. 对比表格
+    print("\n" + "=" * 60)
+    print("📊 四种配置对比总结")
+    print(f"  {'配置':<30s} {'Recall@1':>9s} {'Recall@3':>9s} {'Recall@5':>9s} {'MRR':>9s}")
+    print(f"  {'-'*66}")
+    for label, res in [
+        ("A: 纯向量检索", r1),
+        ("B: 纯 BM25", r2),
+        ("C: 混合检索 (Vector+BM25)", r3),
+        ("D: 混合检索 + 重写", r4),
+    ]:
+        s = res["summary"]
+        print(f"  {label:<30s} {s.get('recall@1', 0):>9.4f} {s.get('recall@3', 0):>9.4f} {s.get('recall@5', 0):>9.4f} {s.get('mrr', 0):>9.4f}")
+
+
+if __name__ == "__main__":
+    # 使用示例（实际运行时需要连接第 2 课的文档库）
+    print("请确保已从第 2 课导入 chroma_collection 和 get_embedding")
+    print("用法：from retrieval_adapter import run_comparison_eval")
+    print("       run_comparison_eval(evaluate, './golden.json')")</code></pre>
+
+    <div class="panel good">
+      <h3>适配器模式的威力</h3>
+      <p><code>build_*_retriever()</code> 系列函数都返回 <code>Callable[[str], list[dict]]</code>——这个签名与第 4 课的 <code>evaluate()</code> 完全兼容。你可以把其中任何一个传给 <code>evaluate()</code>，评估器不需要任何改动。</p>
+      <p>并且适配器可以<strong>嵌套组合</strong>：<code>build_rewrite_retriever(qp, build_hybrid_retriever(...))</code> 实现了"先重写查询，再做混合检索"。这种函数式组合模式让你可以用最小的代码量探索大量的配置组合。</p>
+    </div>
+  </section>
+
+  <section>
+    <h2>第五步：实战——你的第一个对比实验</h2>
+
+    <p>现在让我们把一切串联起来，用第 4 课的评估器跑一次完整的对比实验。</p>
+
+    <h3>步骤概览</h3>
+    <ol>
+      <li>从第 2 课的文档库中导出所有文档和 chunk</li>
+      <li>用 BM25Retriever 构建倒排索引</li>
+      <li>准备 golden.json（如果还没做，参见第 4 课）</li>
+      <li>运行 run_comparison_eval() 对比四种配置</li>
+      <li>分析结果并记录发现</li>
+    </ol>
+
+    <pre><code>"""run_lesson5_experiment.py — 完整实验脚本"""
+
+# 1. 从第 2 课加载文档库
+from demo_v2 import chroma_collection, DOCS, get_embedding
+
+# 2. 构建 BM25 索引
+# 需要从 chroma 中提取所有文档
+all_chunks = chroma_collection.get(include=["documents", "metadatas"])
+chunk_docs = []
+for i in range(len(all_chunks["ids"])):
+    chunk_docs.append({
+        "id": all_chunks["ids"][i],
+        "text": all_chunks["documents"][i],
+        "metadata": all_chunks["metadatas"][i] if all_chunks["metadatas"] else {},
+    })
+
+from bm25_retriever import BM25Retriever
+bm25 = BM25Retriever(k1=1.5, b=0.75)
+bm25.build_index(chunk_docs)
+
+# 3. 引入评估器（第 4 课）
+from evaluator import evaluate, print_report
+
+# 4. 导入适配器
+from retrieval_adapter import (
+    build_chroma_retriever,
+    build_bm25_retriever,
+    build_hybrid_retriever,
+    build_rewrite_retriever,
+    run_comparison_eval,
+)
+from query_processor import QueryProcessor
+
+# 5. 运行对比实验
+run_comparison_eval(evaluate, "./golden.json")
+
+# 6. 进一步实验：RFF k 值调优
+print("\n\n" + "=" * 60)
+print("🔬 进阶实验：RRF k 值对混合检索的影响")
+vector_fn = build_chroma_retriever(top_k=20)
+bm25_fn = build_bm25_retriever(bm25, top_k=20)
+
+for k in [10, 30, 60, 100, 200]:
+    hybrid_fn = build_hybrid_retriever(
+        vector_fn, bm25_fn,
+        rrf_k=k, top_k_retrieve=20, top_k_final=10,
+    )
+    res = evaluate(hybrid_fn, "./golden.json")
+    s = res["summary"]
+    print(f"  RRF k={k:>4d} → Recall@3={s.get('recall@3', 0):.4f}  MRR={s['mrr']:.4f}")</code></pre>
+
+    <div class="panel warn">
+      <h3>你可能会观察到的模式</h3>
+      <ul>
+        <li><strong>纯 BM25 在精确匹配查询上碾压向量检索</strong>：当 golden.json 中包含订单号、SKU、发票号时，BM25 的 Recall@K 会远高于纯向量检索。</li>
+        <li><strong>混合检索在总体上优于单一检索</strong>：RRF 融合后，向量检索在语义查询上的优势和 BM25 在精确匹配上的优势互补，总体指标通常超过任何一种单一方法。</li>
+        <li><strong>查询重写对口语化查询有明显提升</strong>：添加查询重写后，MRR 通常提升 0.02-0.05，特别是对于包含"这个东西""能不能""多少钱"这类口语化表达的查询。</li>
+        <li><strong>RRF k 值选择不太敏感</strong>：k=30 到 k=100 之间的结果通常很接近。默认 k=60 在绝大多数场景下表现良好。</li>
+      </ul>
+    </div>
+  </section>
+
+  <section>
+    <h2>练习：动手强化你的 RAG 检索系统</h2>
+
+    <div class="quiz" id="quiz1">
+      <h3>练习一：选择题</h3>
+      <p>用户查询"帮我查一下订单 DY20241001 的物流信息"，你的知识库中有如下文档：<br>
+      A. "标准物流配送时间 3-5 个工作日"<br>
+      B. "订单 DY20241001 已于 2024-10-05 发货，预计 3 个工作日内送达"<br>
+      C. "退货运费由买家承担，质量问题由卖家承担"<br>
+      以下哪个说法是正确的？</p>
+      <button data-answer="wrong">向量检索能最精准地找到文档 B，因为语义匹配最好</button>
+      <button data-answer="right">BM25 能最精准地匹配文档 B，因为"DY20241001"是精确匹配的关键词，向量检索可能把 A 的"订单""物流"与 B 混淆</button>
+      <button data-answer="wrong">向量检索和 BM25 都会优先匹配文档 C，因为"订单"这个词在 C 中出现频率更高</button>
+    </div>
+    <p class="feedback" id="feedback1"></p>
+
+    <div class="quiz" id="quiz2">
+      <h3>练习二：选择题</h3>
+      <p>RRF（Reciprocal Rank Fusion）最核心的优势是什么？</p>
+      <button data-answer="wrong">计算速度比直接对分数取平均更快</button>
+      <button data-answer="right">不需要对来自不同排序器的分数做归一化，因为它们分布不同（一个在 [-1,1]，另一个可以到 0-50+），RRF 只看排名</button>
+      <button data-answer="wrong">RRF 不需要任何参数，直接运行即可</button>
+    </div>
+    <p class="feedback" id="feedback2"></p>
+
+    <div class="task panel">
+      <h3>练习三：动手实验</h3>
+      <p><strong>如果你的文档库和评估器已就绪</strong>：</p>
+      <ol>
+        <li>运行 <code>python run_lesson5_experiment.py</code> 获得四种配置的对比结果</li>
+        <li>截图或复制评估报告，发给我分析</li>
+      </ol>
+      <p><strong>如果你的 golden.json 还没有包含精确匹配测试用例</strong>：</p>
+      <ol>
+        <li>在你的 golden.json 中添加至少 3 个包含精确匹配的查询（如"订单号 XXX 在哪""型号 YYY 规格是什么"等）</li>
+        <li>重新运行基线——观察纯向量检索在这些精确查询上的 Recall@K</li>
+        <li>然后启用混合检索，观察对比结果</li>
+      </ol>
+    </div>
+
+    <div class="quiz" id="quiz3">
+      <h3>练习四：选择题</h3>
+      <p>对于查询拆封了能不能退货，以下哪种查询转换策略的<strong>组合</strong>最合理？</p>
+      <button data-answer="wrong">只用 HyDE，因为它最先进</button>
+      <button data-answer="wrong">不用任何转换，原始查询已经最优</button>
+      <button data-answer="right">先用 Query Rewrite 规范化为"拆封商品的无理由退货政策是什么"，如果查询更短（少于 5 字）再启用 Multi-Query。HyDE 在此场景没有额外收益</button>
+    </div>
+    <p class="feedback" id="feedback3"></p>
+  </section>
+
+  <section>
+    <h2>生产级混合检索架构</h2>
+    <p>本课讲到的是混合检索的核心逻辑。在生产环境中，混合检索的架构通常如下图：</p>
+
+    <div class="flow" style="flex-wrap:wrap; gap:6px;">
+      <span class="flow-box">用户查询</span>
+      <span class="flow-arrow">→</span>
+      <span class="flow-box" style="border-color:var(--accent);">Query Processor<br><small>Rewrite → Expand</small></span>
+      <span class="flow-arrow">→</span>
+      <span class="flow-box" style="border-color:var(--accent);">双路召回<br><small>Vector + BM25</small></span>
+      <span class="flow-arrow">→</span>
+      <span class="flow-box" style="border-color:var(--accent);">RRF 融合</span>
+      <span class="flow-arrow">→</span>
+      <span class="flow-box" style="border-color:var(--accent);">Cross-Encoder<br>重排序</span>
+      <span class="flow-arrow">→</span>
+      <span class="flow-box">LLM 生成</span>
+    </div>
+
+    <p>这是目前工业级 RAG 系统中最为广泛采用的完整管道。各环节推荐状态：</p>
+    <table>
+      <tr><th>环节</th><th>推荐</th><th>可选</th><th>不推荐</th></tr>
+      <tr><td>Query Rewrite</td><td>✅ 总是开启</td><td></td><td></td></tr>
+      <tr><td>Multi-Query</td><td></td><td>✅ 短查询 (&lt;5 词) 开启</td><td></td></tr>
+      <tr><td>HyDE</td><td></td><td>✅ 高模糊度查询</td><td>长查询场景</td></tr>
+      <tr><td>向量检索</td><td>✅ 总是开启</td><td></td><td></td></tr>
+      <tr><td>BM25 检索</td><td>✅ 总是开启</td><td></td><td></td></tr>
+      <tr><td>RRF 融合</td><td>✅ 总是开启</td><td></td><td></td></tr>
+      <tr><td>Cross-Encoder 重排序</td><td>✅ 总是开启</td><td></td><td></td></tr>
+    </table>
+  </section>
+
+  <section>
+    <h2>你现在应该记住的五句话</h2>
+    <ol>
+      <li><strong>向量检索和 BM25 关键词检索是互补的，不是替代的。</strong>语义检索擅长理解意图，BM25 擅长精确匹配——两者结合才能覆盖真实世界的查询多样性。</li>
+      <li><strong>RRF 是融合两种异构排序器的最优方法。</strong>不看分数只看排名，无需归一化，k=60 是接近通用的保守默认值。</li>
+      <li><strong>查询转换是检索前的"低垂果实"。</strong>Query Rewrite 默认开启，成本最低收益最稳定；Multi-Query 用于短查询；HyDE 用于模糊查询。</li>
+      <li><strong>适配器模式让你能自由组合检索策略。</strong>用统一的 <code>Callable[[str], list[dict]]</code> 接口包装每一种检索器，评估器不用改一行代码。</li>
+      <li><strong>用评估器驱动你的调优决策。</strong>对比实验不是要找到"最佳配置"，而是要理解你的数据在哪些查询上、什么条件下表现好或差。</li>
+    </ol>
+  </section>
+
+  <section>
+    <h2>接下来学什么</h2>
+    <p>现在你的 RAG 系统有了三大核心能力：</p>
+    <ul>
+      <li>✅ <strong>语义检索</strong>（第 2 课）——用 embedding 找语义相似的 chunk</li>
+      <li>✅ <strong>检索评估 + 重排序</strong>（第 4 课）——量化指标 + Cross-Encoder 精排</li>
+      <li>✅ <strong>混合检索 + 查询转换</strong>（第 5 课）——BM25 + 向量 + 查询优化</li>
+    </ul>
+    <p>但还缺少最后一环：<strong>答案质量评估与优化</strong>。现在你知道了"检索质量好不好"，但还不知道"生成质量好不好"——答案是否完整、准确、无幻觉、有引用。下一课将深入：</p>
+    <ul>
+      <li><strong>答案质量评估</strong>：用 Faithfulness、Answer Relevance、Context Precision 等指标评估生成质量</li>
+      <li><strong>RAGAS 框架</strong>：用开源评估框架自动化端到端评估</li>
+      <li><strong>高级提示词策略</strong>：通过提示词工程减少幻觉、提高引用质量</li>
+    </ul>
+    <p>复习用速查表：<a href="../reference/0005-混合检索与查询转换-cheatsheet.html">混合检索与查询转换速查表</a>。回顾 RRF 的原始论文：<a href="https://plg.uwaterloo.ca/~gvcormac/cormacksigir09-rrf.pdf">Cormack et al. 2009</a>。需要时回顾第 4 课：<a href="0004-检索评估与重排序.html">检索评估与重排序</a>。</p>
+    <p class="small">有任何不清楚的地方——BM25 原理、RRF 计算公式、查询转换为什么有效、或者你的对比实验结果看不懂——直接问我。把你的实验报告 JSON 和问题贴给我，我帮你分析。</p>
+  </section>
+</main>
+
+<script>
+  function setupQuiz(quizId, feedbackId) {
+    const quiz = document.getElementById(quizId);
+    const feedback = document.getElementById(feedbackId);
+    quiz.addEventListener("click", (event) => {
+      const button = event.target.closest("button");
+      if (!button) return;
+      const allButtons = quiz.querySelectorAll("button");
+      allButtons.forEach((item) => item.classList.remove("correct", "wrong"));
+      if (button.dataset.answer === "right") {
+        button.classList.add("correct");
+        if (quizId === "quiz1") {
+          feedback.textContent = "✓ 正确。精确匹配场景（订单号 SKU 型号）是向量检索的已知弱项——tokenization 会把"DY20241001"切成子词，丢失精确匹配信息。BM25 恰恰相反，它完美匹配这个精确 token。";
+        } else if (quizId === "quiz2") {
+          feedback.textContent = "✓ 正确。RRF 只看排名不看分数绝对值，所以它天然适用于融合任何异构排序器——不管分数是从 -1 到 1 还是从 0 到无穷大。";
+        } else {
+          feedback.textContent = "✓ 正确。查询重写成本最低、收益稳定，是默认开启的最佳选择。短查询追加 Multi-Query 以增加召回覆盖面。HyDE 更适合需要生成完整语义的模糊查询，对"拆封能不能退"这种已经很具体的查询没有额外收益。";
+        }
+        feedback.style.color = "var(--good)";
+      } else {
+        button.classList.add("wrong");
+        if (quizId === "quiz1") {
+          feedback.textContent = "再想想：订单号"DY20241001"是一个精确的 token 匹配场景。向量检索会把订单号切碎成子词后再做 embedding，丢失了精确匹配的能力。BM25 对这种精确匹配最为擅长。";
+        } else if (quizId === "quiz2") {
+          feedback.textContent = "再想想：RRF 的核心优势是 rank-based——它不需要理解或归一化不同排序器的分数分布。想象一下 cosine similarity 范围 [-1,1] 和 BM25 score [0, 50+] 相加，不归一化会怎样？RRF 巧妙地绕过了这个问题。";
+        } else {
+          feedback.textContent = "再想想：不同的查询长度和模糊程度适合不同的转换策略。成本最低的 Query Rewrite 其实是收益最稳定的。";
+        }
+        feedback.style.color = "var(--bad)";
+      }
+    });
+  }
+  setupQuiz("quiz1", "feedback1");
+  setupQuiz("quiz2", "feedback2");
+  setupQuiz("quiz3", "feedback3");
+</script>
+
+</body>
+</html>

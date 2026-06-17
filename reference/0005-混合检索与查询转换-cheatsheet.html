@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>速查表：混合检索与查询转换</title>
+  <style>
+    :root { --ink:#172033; --muted:#667085; --line:#d7dde8; --accent:#0f766e; --accent2:#8b5e00; --bg:#fbfcfe; --panel:#fff; }
+    * { box-sizing:border-box; }
+    body { margin:0; font:15px/1.6 ui-sans-serif,system-ui,-apple-system,Segoe UI,sans-serif; color:var(--ink); background:var(--bg); }
+    main { max-width:1100px; margin:0 auto; padding:32px 20px; }
+    h1 { font-size:28px; margin:0 0 4px; }
+    .subtitle { color:var(--muted); margin:0 0 20px; font-size:16px; }
+    h2 { font-size:17px; margin:20px 0 8px; border-bottom:1px solid var(--line); padding-bottom:4px; color:var(--accent); }
+    .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(330px,1fr)); gap:14px; }
+    .card { border:1px solid var(--line); border-radius:8px; padding:12px 14px; background:var(--panel); }
+    .card h3 { font-size:14px; margin:0 0 6px; }
+    .card pre { font-size:12.5px; line-height:1.5; overflow-x:auto; background:#f6f8fa; border-radius:4px; padding:8px; margin:4px 0 0; }
+    code { font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; background:#eef6f5; padding:1px 4px; border-radius:3px; font-size:0.92em; }
+    pre code { background:transparent; padding:0; }
+    table { border-collapse:collapse; width:100%; margin:8px 0; font-size:14px; }
+    th, td { border:1px solid var(--line); padding:5px 10px; text-align:left; }
+    th { background:#f6f8fa; font-weight:600; }
+    .warn { background:#fffbeb; border-left:3px solid var(--accent2); padding:8px 12px; margin:8px 0; border-radius:4px; font-size:13px; }
+    ul { margin:4px 0; padding-left:18px; }
+    li { margin:2px 0; }
+    @media print { body{background:#fff;} .card{break-inside:avoid;} main{max-width:none;padding:15mm;} }
+  </style>
+</head>
+<body>
+<main>
+  <h1>⚡ 混合检索与查询转换 · 速查表</h1>
+  <p class="subtitle">第 5 课参考 —— BM25 · RRF · Multi-Query · Query Rewrite · HyDE</p>
+
+  <section>
+    <h2>📐 BM25 关键词检索</h2>
+    <div class="grid">
+      <div class="card">
+        <h3>核心参数</h3>
+        <table>
+          <tr><th>参数</th><th>默认值</th><th>作用</th><th>调参方向</th></tr>
+          <tr><td><code>k1</code></td><td>1.2–2.0</td><td>词频饱和度：越大则高频词贡献越大</td><td>短文档 ↑，长文档 ↓</td></tr>
+          <tr><td><code>b</code></td><td>0.75</td><td>长度归一化：0=不惩罚长文档，1=完全惩罚</td><td>文档长度差异大 ↑</td></tr>
+        </table>
+      </div>
+      <div class="card">
+        <h3>安装</h3>
+        <pre><code>pip install rank-bm25 jieba</code></pre>
+      </div>
+      <div class="card">
+        <h3>基础用法</h3>
+        <pre><code>from rank_bm25 import BM25Okapi
+import jieba
+
+tokenized = [list(jieba.cut(d)) for d in texts]
+bm25 = BM25Okapi(tokenized, k1=1.5, b=0.75)
+scores = bm25.get_scores(
+    list(jieba.cut(query)))
+</code></pre>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>🔀 RRF 分数融合</h2>
+    <div class="grid">
+      <div class="card">
+        <h3>公式</h3>
+        <pre><code>分数(d) = Σ 1 / (k + rank_r(d))
+
+k = 60（默认）
+rank_r(d) 从 1 开始</code></pre>
+      </div>
+      <div class="card">
+        <h3>Python 实现</h3>
+        <pre><code>def rrf_score(ranks, k=60):
+    return sum(
+        1.0 / (k + r) for r in ranks
+    )</code></pre>
+      </div>
+      <div class="card">
+        <h3>特性</h3>
+        <ul>
+          <li>只看排名，不看分数</li>
+          <li>天然支持异构排序器融合</li>
+          <li>k=30–100 结果稳定</li>
+          <li>可与 Cross-Encoder 串联</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>🔄 三种查询转换策略</h2>
+    <table>
+      <tr><th>策略</th><th>LLM 调用</th><th>检索次数</th><th>收益场景</th><th>成本</th><th>推荐</th></tr>
+      <tr>
+        <td><strong>Query Rewrite</strong></td>
+        <td>1 次</td><td>1 次</td>
+        <td>口语化→书面语</td><td>低</td>
+        <td>✅ 总是开启</td>
+      </tr>
+      <tr>
+        <td><strong>Multi-Query</strong></td>
+        <td>1 次 → 3-5 条变体</td><td>N 次（变体数）</td>
+        <td>短查询 (&lt;5 词)、覆盖面不足</td><td>中</td>
+        <td>✅ 短查询时开启</td>
+      </tr>
+      <tr>
+        <td><strong>HyDE</strong></td>
+        <td>1 次 → 假想文档</td><td>1 次（用假想文档 embedding）</td>
+        <td>模糊查询、无上下文</td><td>中</td>
+        <td>✅ 可选开关</td>
+      </tr>
+    </table>
+  </section>
+
+  <section>
+    <h2>🧱 关键代码片段</h2>
+    <div class="grid">
+      <div class="card">
+        <h3>Query Rewrite</h3>
+        <pre><code>SYSTEM = "将查询重写为规范表述"
+response = client.chat.completions.create(
+    model="gpt-4o-mini",
+    messages=[
+        {"role": "system",
+         "content": SYSTEM},
+        {"role": "user",
+         "content": f"原始查询：{query}"},
+    ],
+)
+rewritten = response.choices[0].message.content</code></pre>
+      </div>
+      <div class="card">
+        <h3>Multi-Query 融合</h3>
+        <pre><code>def multi_query_retrieve(q, retrieve_fn):
+    variants = llm_expand(q)  # → [q, v1, v2, v3]
+    scores = {}
+    for vq in variants:
+        results = retrieve_fn(vq)
+        for j, doc in enumerate(results):
+            sid = doc["id"]
+            scores.setdefault(sid, 0)
+            scores[sid] += 1.0 / (60 + j + 1)
+    return sorted(scores.items(),
+                  key=lambda x: -x[1])</code></pre>
+      </div>
+      <div class="card">
+        <h3>HyDE 检索</h3>
+        <pre><code># 1. 生成假想文档
+hypo = llm_generate(
+    f"生成一段知识库文档：{query}",
+)
+
+# 2. 用假想文档 embedding 检索
+hypo_vec = embed(hypo)
+results = vector_db.query(
+    hyp_vec, top_k=10,
+)</code></pre>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>📊 对比实验模板</h2>
+    <pre><code>配置 A: 纯向量检索        → evaluate(vector_fn)
+配置 B: 纯 BM25           → evaluate(bm25_fn)
+配置 C: 混合 (Vector+BM25)→ evaluate(hybrid_fn)
+配置 D: 混合 + 查询重写   → evaluate(rewrite_fn)
+
+输出表格:
+  配置              Recall@1  Recall@3  Recall@5  MRR
+  A: 纯向量检索      0.45      0.62      0.71      0.52
+  B: 纯 BM25         0.38      0.55      0.65      0.44
+  C: 混合检索        0.52      0.70      0.78      0.58
+  D: 混合+重写       0.55      0.73      0.81      0.61</code></pre>
+
+  <section>
+    <h2>📚 参考文献</h2>
+    <ul>
+      <li><a href="https://github.com/dorianbrown/rank_bm25">Rank-BM25</a> — BM25 Python 实现</li>
+      <li><a href="https://arxiv.org/abs/2212.10496">HyDE 论文</a> — 假想文档嵌入</li>
+      <li><a href="https://arxiv.org/abs/2305.03653">Query Expansion 论文</a> — LLM 查询扩展</li>
+      <li><a href="https://plg.uwaterloo.ca/~gvcormac/cormacksigir09-rrf.pdf">RRF 原始论文</a></li>
+      <li>上一课速查表：<a href="0004-检索评估与重排序-cheatsheet.html">检索评估与重排序</a></li>
+    </ul>
+  </section>
+</main>
+</body>
+</html>

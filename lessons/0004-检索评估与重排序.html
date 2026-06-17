@@ -1,0 +1,686 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>第 4 课：检索质量评估与重排序 —— 从"能检"到"检得准"</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink:#172033; --muted:#667085; --line:#d7dde8; --accent:#0f766e;
+      --accent2:#8b5e00; --good:#116329; --bad:#a10e25; --bg:#fbfcfe; --panel:#fff;
+    }
+    * { box-sizing: border-box; }
+    body { margin:0; font-family: ui-serif, Georgia, "Noto Serif SC", serif; color:var(--ink); background:var(--bg); line-height:1.7; }
+    main { max-width: 900px; margin: 0 auto; padding: 42px 22px 70px; }
+    header { margin-bottom: 30px; }
+    .kicker { font: 700 13px/1.2 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color:var(--accent); text-transform: uppercase; letter-spacing: .08em; }
+    h1 { font-size: clamp(32px, 5vw, 54px); line-height:1.08; margin: 10px 0 12px; letter-spacing:0; }
+    h2 { font-size: 23px; margin: 34px 0 12px; padding-bottom: 6px; border-bottom:1px solid var(--line); }
+    h3 { font-size: 18px; margin: 20px 0 8px; }
+    p { margin: 0 0 14px; }
+    a { color:#0b5cad; text-decoration-thickness:1px; text-underline-offset:3px; }
+    .lede { color:var(--muted); max-width:760px; font-size:18px; }
+    .panel { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:18px; margin:16px 0; }
+    .panel.good { border-left:4px solid var(--good); }
+    .panel.warn { border-left:4px solid var(--accent2); }
+    .panel.info { border-left:4px solid var(--accent); }
+    code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    code { background:#eef6f5; padding:2px 5px; border-radius:4px; font-size:0.92em; }
+    pre { overflow:auto; background:#f6f8fa; color:var(--ink); border:1px solid var(--line); border-radius:8px; padding:16px; font-size:14px; line-height:1.55; }
+    .small { color:var(--muted); font-size:14px; }
+    .quiz { display:grid; gap:10px; margin-top:12px; }
+    .quiz-multi { display:grid; gap:10px; margin-top:12px; }
+    button { border:1px solid var(--line); background:#fff; border-radius:8px; padding:11px 13px; text-align:left; font: 600 15px/1.35 ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif; color:var(--ink); cursor:pointer; }
+    button:hover { border-color:var(--accent); }
+    button.selected { border-color:var(--accent); background:#eef6f5; }
+    button.correct { border-color:var(--good); background:#edf8ef; color:var(--good); }
+    button.wrong { border-color:var(--bad); background:#fff0f2; color:var(--bad); }
+    .feedback { min-height:26px; font-weight:700; margin-top:8px; }
+    .task { border-left:4px solid var(--accent2); padding-left:14px; }
+    table { border-collapse:collapse; width:100%; margin:14px 0; }
+    th, td { border:1px solid var(--line); padding:8px 12px; text-align:left; font-size:15px; }
+    th { background:#f6f8fa; font-weight:700; }
+    ul, ol { padding-left:22px; }
+    .combo { display:grid; grid-template-columns: 1fr 1fr; gap:14px; margin:16px 0; }
+    .flow { display:flex; align-items:center; gap:8px; flex-wrap:wrap; justify-content:center; margin:16px 0; }
+    .flow-box { border:1px solid var(--line); border-radius:6px; padding:8px 14px; background:var(--panel); font-size:14px; text-align:center; }
+    .flow-arrow { font-size:20px; color:var(--muted); }
+    @media (max-width: 640px) { .combo { grid-template-columns: 1fr; } }
+    @media print { body { background:white; } main { max-width:none; padding:20mm; } .panel { break-inside: avoid; } button { border-color:#aaa; } }
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <div class="kicker">Lesson 0004</div>
+    <h1>检索质量评估与重排序：从"能检"到"检得准"</h1>
+    <p class="lede">本课目标：告别"肉眼评估"模式，学会用 Recall@K、MRR 等指标量化检索质量，并用重排序（Re-ranking）技术把精准答案排到最前面。</p>
+  </header>
+
+  <section>
+    <h2>你今天要获得的能力</h2>
+    <p>学完本课，你将拥有：</p>
+    <ul>
+      <li>一个 <strong>evaluator.py</strong> 模块，能用 Recall@K、MRR、NDCG 三个指标自动评估检索质量</li>
+      <li>一份 <strong>golden.json</strong> 标注数据集（人工标注的 10-20 条测试查询），作为你的"检索质检工具"</li>
+      <li>一条 <strong>重排序管道</strong>：先用 embedding 粗召回 top-K，再用 Cross-Encoder 精排到 top-N</li>
+      <li>一套可重复的对比实验方法，科学地判断参数改动（chunk_size、模型、top_K）是变好了还是变坏了</li>
+    </ul>
+    <p>这是你的 RAG 从"能跑 Demo"到"可量化、可优化"的关键一跃。</p>
+    <p class="small">推荐阅读：<a href="https://www.sbert.net/examples/applications/cross-encoder/README.html">Sentence-Transformers Cross-Encoder</a>、<a href="https://nlp.stanford.edu/IR-book/html/htmledition/evaluation-of-ranked-retrieval-results-1.html">IR 评估指标（Stanford IR 教材）</a>。速查表：<a href="../reference/0004-检索评估与重排序-cheatsheet.html">检索评估与重排序速查表</a>。</p>
+  </section>
+
+  <section>
+    <h2>为什么评估是 RAG 的关键瓶颈？</h2>
+    <p>到现在为止，你判断"检索效果好不好"靠的是什么？大概率是<strong>肉眼观察</strong>——问一句"退货要多久"，看看返回的 chunk 对不对，答案好不好。这在新手阶段没问题，但很快就会遇到三个问题：</p>
+
+    <div class="panel warn">
+      <h3>没有量化指标的 RAG 是"盲人摸象"</h3>
+      <ol>
+        <li><strong>你无法判断改动是变好还是变坏</strong>：你把 chunk_size 从 500 改到 300，多问了 3 个问题，感觉"可能好了一点"——但你没有数据支撑。更糟的是，这次改动可能让某些查询变好、另一些变差，但你完全不知道。</li>
+        <li><strong>你无法比较不同的策略</strong>：text-embedding-3-small vs BGE vs Cohere 哪个更好？语义切块 vs 固定长度切块哪个更适合你的文档？没有量化指标，这些比较纯属猜。</li>
+        <li><strong>你不能向团队证明你的改进</strong>：企业环境中你说"我感觉检索变好了"和说"Recall@10 从 0.62 提升到 0.85"是完全不同的可信度。</li>
+      </ol>
+    </div>
+
+    <p>本课的核心观点：<strong>评估是 RAG 优化的基础。没有评估，就没有优化。</strong>你不需要一个完美的评估集——10 条精心标注的查询就已经能帮你挡住 90% 的倒退。</p>
+  </section>
+
+  <section>
+    <h2>第一步：理解三个核心评估指标</h2>
+    <p>在代码动手之前，先理解我们用哪三个指标、它们各自回答什么问题。</p>
+
+    <h3>指标一：Recall@K（召回率）——"答案在不在前 K 个里？"</h3>
+    <p>这是最重要的指标。它回答："对于这个查询，正确答案的 chunk 有没有出现在我返回的前 K 个结果中？"</p>
+    <pre><code> Recall@K = 前 K 个结果中相关 chunk 的数量 ÷ 所有相关 chunk 的总数</code></pre>
+    <p>例如：某个查询相关的 chunk 有 2 个（doc-A 和 doc-B），你检索到 top-5 返回了 [doc-A, doc-C, doc-D, doc-E, doc-B]，那么 Recall@5 = 2/2 = 1.0（满分），因为两个相关 chunk 都在 top-5 里。但 Recall@3 = 1/2 = 0.5，因为 top-3 里只有 doc-A。</p>
+    <p class="small">Recall@K 只关心"有没有在前 K 个"，不关心具体排在第 1 还是第 5。这就是 MRR 要解决的问题。</p>
+
+    <h3>指标二：MRR（Mean Reciprocal Rank）——"第一个正确结果排第几？"</h3>
+    <p>Reciprocal Rank 的意思是"排名的倒数"：排第 1 得 1 分，排第 3 得 1/3 分，没找到得 0 分。MRR 就是所有查询的 Reciprocal Rank 的平均值。</p>
+    <pre><code> RR = 1 / rank_第一个相关结果
+    比如第一个相关结果排在第 2 → RR = 1/2 = 0.5
+    排在第 5 → RR = 1/5 = 0.2
+    没排进 top-K → RR = 0</code></pre>
+    <p>MRR 回答了"用户最快能在第几个结果找到他要的答案"。在客服问答场景中，用户通常只看第一个结果——所以 MRR 非常贴近真实体验。</p>
+
+    <h3>指标三：NDCG（Normalized Discounted Cumulative Gain）——"排序质量有多好？"</h3>
+    <p>Recall@K 只看"有没有"，MRR 只看"第一个在哪"，但 NDCG 更进一步——它评估<strong>整个排序的质量</strong>：排在前面的是否比后面的更相关？这需要你对每个文档给出分级相关度（如：2=完美匹配、1=部分相关、0=不相关）。</p>
+    <pre><code> DCG = 从第 1 到第 K 个结果的 相关度 / log2(排名+1) 的累加
+    NDCG = DCG / 理想排序下的 DCG（IDCG）</code></pre>
+    <p>NDCG 的好处：它惩罚"把相关文档排在后面"的行为——即使所有相关文档都进了 top-K，如果排在最后的都是最相关的，NDCG 就会反映出来。不过本课中 NDCG 作为进阶指标，初版评估器可以只实现 Recall@K 和 MRR。</p>
+
+    <div class="panel info">
+      <h3>三个指标的选择指南</h3>
+      <table>
+        <tr><th>指标</th><th>回答的问题</th><th>适合场景</th><th>标注成本</th></tr>
+        <tr><td>Recall@K</td><td>答案在前 K 个吗？</td><td>所有 RAG 系统（必选）</td><td>低（只需要二元相关/不相关）</td></tr>
+        <tr><td>MRR</td><td>第一个正确答案排第几？</td><td>客服问答（用户只看 top-1）</td><td>低（同上）</td></tr>
+        <tr><td>NDCG</td><td>排序质量好吗？</td><td>文档检索、搜索结果展示</td><td>中（需要分级相关度）</td></tr>
+      </table>
+      <p class="small">初版评估器建议只做 Recall@K（K=1,3,5）和 MRR，这两个指标共享同一份标注，不需要额外成本。</p>
+    </div>
+  </section>
+
+  <section>
+    <h2>第二步：构建你的标注测试集（Golden Dataset）</h2>
+    <p>评估指标需要"标准答案"——也就是人工标注的查询-文档对应关系。这是所有评估工作的地基。</p>
+
+    <h3>标注格式</h3>
+    <pre><code>// golden.json — 测试集文件
+[
+    {
+        "query": "7 天无理由退货的条件是什么？",
+        "query_id": "q001",
+        "relevant_ids": [
+            "return-policy.md#0",
+            "return-policy.md#1"
+        ],
+        "note": "答案跨两个 chunk，都在 return-policy.md 中"
+    },
+    {
+        "query": "发票什么时候能开出？",
+        "query_id": "q002",
+        "relevant_ids": [
+            "invoice.md#2"
+        ],
+        "note": "在发票政策文档的第三个 chunk 中"
+    },
+    {
+        "query": "我已经拆封了但手机有质量问题怎么办？",
+        "query_id": "q003",
+        "relevant_ids": [
+            "return-policy.md#3"
+        ],
+        "note": "质量问题处理——核心测试用例"
+    },
+    {
+        "query": "我买的手机已经拆封了还能退吗？",
+        "query_id": "q004",
+        "relevant_ids": [
+            "return-policy.md#0"
+        ],
+        "note": "拆封商品能否无理由退货——负面测试，应该是不能"
+    }
+    // ... 共 10-20 条
+]</code></pre>
+
+    <h3>标注原则：三条黄金法则</h3>
+    <div class="panel good">
+      <ol>
+        <li><strong>覆盖不同难度</strong>：既包含"关键词匹配就能检到"的简单查询（如"退货条件"），也包含需要语义理解的难查询（如"我买了东西不喜欢但已经拆了怎么办"）。</li>
+        <li><strong>包含负面测试</strong>：问一个明确没有答案的问题（如问"激光打印机的耗材价格"但你知识库里只有客服政策，没有产品目录）。好的 RAG 系统应该返回"没有相关文档"而不是胡编乱造。</li>
+        <li><strong>覆盖不同文档</strong>：确保你每次评估都能覆盖到所有主要文档来源，而不是只测一个文件。</li>
+      </ol>
+    </div>
+
+    <p>标注工作不复杂，但需要动脑子。10 条精心设计的查询 + 对应的相关文档 ID，大约需 20-30 分钟。这是整个 RAG 优化流程中回报率最高的 30 分钟投资——因为后续所有参数调优决策都将基于这些标注数据。</p>
+  </section>
+
+  <section>
+    <h2>第三步：实现评估器（evaluator.py）</h2>
+    <p>评估器的核心逻辑很简单：对每条查询，让检索器返回 top-K 结果，然后用标注的 relevant_ids 去算分。</p>
+
+    <pre><code>"""
+evaluator.py — 检索质量评估器
+指标：Recall@K (K=1,3,5), MRR
+输入：retrieve(query) 函数 + golden.json
+输出：分数 + 详细的逐条分析
+"""
+import json
+from typing import Callable
+
+
+def recall_at_k(retrieved_ids: list[str], relevant_ids: set[str], k: int) -> float:
+    """Recall@K = 前 K 个结果中相关 chunk 数 ÷ 总相关 chunk 数"""
+    if not relevant_ids:
+        return 0.0
+    hits = len(set(retrieved_ids[:k]) & relevant_ids)
+    return hits / len(relevant_ids)
+
+
+def mrr(retrieved_ids: list[str], relevant_ids: set[str]) -> float:
+    """MRR = 第一个相关结果的排名倒数；没找到返回 0"""
+    for i, rid in enumerate(retrieved_ids):
+        if rid in relevant_ids:
+            return 1.0 / (i + 1)
+    return 0.0
+
+
+def evaluate(
+    retrieve_fn: Callable[[str], list[dict]],
+    golden_path: str = "./golden.json",
+    k_values: list[int] | None = None,
+) -> dict:
+    """
+    主评估函数。
+
+    retrieve_fn(query) 返回 [{"id": "...", "text": "...", "score": ...}, ...]
+    golden.json 的每条记录含 query / relevant_ids
+
+    返回：整体指标 + 每条查询的详细结果
+    """
+    if k_values is None:
+        k_values = [1, 3, 5]
+
+    with open(golden_path, "r", encoding="utf-8") as f:
+        test_cases = json.load(f)
+
+    metrics = {f"recall@{k}": [] for k in k_values}
+    metrics["mrr"] = []
+    details = []
+
+    for tc in test_cases:
+        query = tc["query"]
+        relevant = set(tc["relevant_ids"])
+        retrieved = retrieve_fn(query)
+        retrieved_ids = [r["id"] for r in retrieved]
+
+        result = {
+            "query": query,
+            "query_id": tc.get("query_id", ""),
+            "retrieved_ids": retrieved_ids[:max(k_values)],
+            "relevant_ids": list(relevant),
+        }
+
+        for k in k_values:
+            rk = recall_at_k(retrieved_ids, relevant, k)
+            metrics[f"recall@{k}"].append(rk)
+            result[f"recall@{k}"] = rk
+
+        rr = mrr(retrieved_ids, relevant)
+        metrics["mrr"].append(rr)
+        result["mrr"] = rr
+
+        details.append(result)
+
+    # 聚合：取所有查询的平均值
+    summary = {
+        "num_queries": len(test_cases),
+        "k_values": k_values,
+    }
+    for key, values in metrics.items():
+        summary[key] = sum(values) / len(values) if values else 0.0
+
+    return {"summary": summary, "details": details}
+
+
+def print_report(result: dict) -> None:
+    """打印可读的评估报告"""
+    s = result["summary"]
+    print(f"{'='*50}")
+    print(f"📊 检索评估报告")
+    print(f"{'='*50}")
+    print(f"测试查询数: {s['num_queries']}")
+    for k in s["k_values"]:
+        print(f"  Recall@{k}: {s[f'recall@{k}']:.4f}")
+    print(f"  MRR:      {s['mrr']:.4f}")
+
+    worst = sorted(result["details"], key=lambda d: d.get("mrr", 0))[:3]
+    if worst:
+        print(f"\n⚠️  最差的 3 条查询（MRR 最低）：")
+        for w in worst:
+            print(f"  [{w['query_id']}] {w['query'][:50]}... → MRR={w['mrr']:.2f}")
+
+    print(f"\n{'='*50}")
+    print("💡 解读：")
+    print("  Recall@5 > 0.85 → 检索系统健康")
+    print("  Recall@5 0.6-0.85 → 需要优化（chunk 策略、模型、re-rank）")
+    print("  Recall@5 < 0.6 → 严重问题，检索引擎可能不匹配你的文档")
+</code></pre>
+
+    <div class="panel info">
+      <h3>评估器和你的检索函数如何对接？</h3>
+      <p><code>evaluate()</code> 不关心你的检索器内部实现——它只需要一个签名相同的 <code>retrieve_fn(query) -> list[dict]</code>。这意味着你可以用它评估：</p>
+      <ul>
+        <li>Chroma 向量检索</li>
+        <li>BGE embedding + FAISS</li>
+        <li>Elasticsearch 关键词检索</li>
+        <li>加入重排序后的管道</li>
+      </ul>
+      <p>只要 <code>retrieve_fn</code> 返回 <code>[{"id":..., "text":..., "score":...}, ...]</code>，评估器就能工作。这让你实验不同策略时，评估代码完全不变，只需要替换 <code>retrieve_fn</code> 参数。</p>
+    </div>
+  </section>
+
+  <section>
+    <h2>第四步：第一次评估运行</h2>
+    <p>把你的检索器和评估器连接起来跑一次基线（baseline）。不要修改任何参数，先看看你现在的情况。</p>
+
+    <pre><code># run_eval.py — 运行第一次评估
+from demo_v2 import retrieve  # 假设你的检索函数叫 retrieve
+from evaluator import evaluate, print_report
+
+def my_retrieve(query: str) -> list[dict]:
+    """适配器：把已有的 retrieve 函数包装成评估器需要的格式"""
+    # 假设 retrieve 返回 [(text, score, id), ...] 或者 [{...}]
+    results = retrieve(query, top_k=10)
+    # 统一输出格式
+    return [
+        {"id": r["id"], "text": r["text"], "score": r.get("score", 0.0)}
+        for r in results
+    ]
+
+result = evaluate(my_retrieve, golden_path="./golden.json", k_values=[1, 3, 5])
+print_report(result)</code></pre>
+
+    <p>第一次运行的结果很可能不理想（尤其是如果你只有 300-500 tokens 的 chunk 而查询是"我已拆封但质量问题"这样的语义匹配）。记录下来，这就是你的基线——所有后续改进都与它对比。</p>
+
+    <div class="panel good">
+      <h3>基线记录建议</h3>
+      <p>在 <code>eval_results/</code> 目录下保留每次评估的 JSON 结果：</p>
+      <pre><code>eval_results/
+├── baseline-20260617.json         # 第一次运行
+├── chunk500-vs-300-20260617.json  # 调 chunk_size 后
+├── with-reranker-20260617.json    # 加入重排序后
+└── ...</code></pre>
+      <p>命名规则：<code>{改动说明}-{日期}.json</code>。保留历史结果让你能回溯"哪个改动带来了真正的提升"。</p>
+    </div>
+  </section>
+
+  <section>
+    <h2>第五步：理解重排序（Re-ranking）</h2>
+    <p>现在你已经有了量化的基线。假设 Recall@5 = 0.70，即 10 个查询中有 3 个的答案不在前 5 个结果中。怎么提升？</p>
+    <p>最立竿见影的技术是<strong>重排序（Re-ranking）</strong>。</p>
+
+    <h3>双阶段检索的核心思想</h3>
+    <p>Embedding 相似度（cosine similarity）是一种<strong>粗略匹配</strong>——它把整段文本压缩成一个向量，丢失了词级交互信息。两个语义相近但关键细节不同的句子，向量可能很接近。</p>
+
+    <div class="panel warn">
+      <h3>一个例子：Bi-encoder 的盲区</h3>
+      <p>考虑两个句子：</p>
+      <pre><code>查询："已拆封商品能否无理由退货？"
+Chunk A："7 天无理由退货仅适用于未拆封商品。"
+Chunk B："已拆封但存在质量问题的商品，可在签收后 15 天内申请售后检测。"</code></pre>
+      <p>Bi-encoder（text-embedding-3-small）看的是整体语义——两个都是"退货+拆封"相关，向量距离很接近，排序可能把 B 排在 A 前面（因为 B 有"已拆封"这个关键词匹配）。但正确答案其实是 A（"不能退"），B 说的是另一种情况（质量问题才能退）。</p>
+      <p><strong>Cross-encoder 能看到这种差别</strong>：它同时处理查询和 chunk 的 token 序列，捕捉"已拆封→不能"这个精确匹配关系。</p>
+    </div>
+
+    <h3>Bi-encoder vs Cross-encoder</h3>
+    <table>
+      <tr><th>维度</th><th>Bi-encoder（向量检索）</th><th>Cross-encoder（重排序）</th></tr>
+      <tr><td>处理方式</td><td>查询和文档分别编码为向量</td><td>查询和文档拼接为一个序列</td></tr>
+      <tr><td>速度</td><td>⏩ 快。文档向量可预计算</td><td>🐢 慢。每对查询-文档都要计算一次</td></tr>
+      <tr><td>精度</td><td>⭐⭐</td><td>⭐⭐⭐⭐</td></tr>
+      <tr><td>适用范围</td><td>第一步粗召回（top-20 到 top-100）</td><td>第二步精排序（top-20 → top-3 到 top-5）</td></tr>
+      <tr><td>存储</td><td>向量数据库存持久化向量</td><td>不需要存储，运行时计算</td></tr>
+    </table>
+
+    <p>双阶段检索的标准管道：</p>
+    <div class="flow">
+      <span class="flow-box">查询</span>
+      <span class="flow-arrow">→</span>
+      <span class="flow-box">Bi-encoder<br>粗召回 top-20</span>
+      <span class="flow-arrow">→</span>
+      <span class="flow-box">Cross-encoder<br>重排序 top-3</span>
+      <span class="flow-arrow">→</span>
+      <span class="flow-box">LLM 生成答案</span>
+    </div>
+    <p>第一阶段（粗召回）速度快、覆盖面广。第二阶段（精排序）虽然慢，但只处理第一阶段的 20 个结果——计算量可控、精度提升明显。工业级 RAG 系统几乎都采用这种两阶段设计。</p>
+  </section>
+
+  <section>
+    <h2>第六步：实现重排序管道</h2>
+    <p>我们将使用 <code>sentence-transformers</code> 中的 Cross-Encoder 模型。它轻量级、模型文件小，即使在没有 GPU 的笔记本上也能运行。</p>
+
+    <h3>安装依赖</h3>
+    <pre><code>pip install sentence-transformers</code></pre>
+
+    <h3>重排序器模块</h3>
+    <pre><code>"""
+reranker.py — Cross-Encoder 重排序模块
+"""
+from sentence_transformers import CrossEncoder
+from typing import Any
+
+# 模型列表（按精度→速度排序）
+RERANKER_MODELS = {
+    "mini":   "cross-encoder/ms-marco-MiniLM-L-6-v2",    # 最快，~10MB
+    "base":   "cross-encoder/ms-marco-MiniLM-L-12-v2",   # 平衡，~20MB
+    "large":  "cross-encoder/ms-marco-electra-base",     # 最准，~50MB
+}
+
+class Reranker:
+    """轻量重排序器：先用向量检索粗召回，再用 Cross-Encoder 精排序。"""
+
+    def __init__(self, model_name: str = "mini", top_k_rerank: int = 3):
+        model_id = RERANKER_MODELS.get(model_name, model_name)
+        self.model = CrossEncoder(model_id)
+        self.top_k = top_k_rerank
+
+    def rerank(self, query: str, documents: list[dict]) -> list[dict]:
+        """
+        对检索结果重排序。
+
+        documents: 第一阶段检索结果 [{"id":..., "text":..., "score":...}, ...]
+        返回: 重排序后的 top-k 结果（保留原始 score + 新增 rerank_score）
+        """
+        if not documents:
+            return []
+
+        # 构建查询-文档对
+        pairs = [[query, doc["text"]] for doc in documents]
+
+        # Cross-Encoder 打分
+        scores = self.model.predict(pairs, show_progress_bar=False)
+
+        # 合并分数并排序
+        for i, doc in enumerate(documents):
+            doc["rerank_score"] = float(scores[i])
+
+        ranked = sorted(documents, key=lambda d: d["rerank_score"], reverse=True)
+
+        return ranked[:self.top_k]
+
+
+if __name__ == "__main__":
+    # 快速测试
+    reranker = Reranker("mini")
+    docs = [
+        {"id": "a", "text": "7 天无理由退货仅适用于未拆封商品。"},
+        {"id": "b", "text": "已拆封但质量问题可在 15 天内申请售后。"},
+        {"id": "c", "text": "退款到账时间 1-3 个工作日。"},
+    ]
+    result = reranker.rerank("拆封了能不能退货？", docs)
+    for r in result:
+        print(f"  {r['id']}: rerank_score={r['rerank_score']:.4f}  |  {r['text'][:40]}")</code></pre>
+
+    <h3>把重排序器接入 RAG 管道</h3>
+    <pre><code># demo_v3.py —— 加入重排序的 RAG 管道
+from demo_v2 import DOCS, chroma_collection, get_embedding
+from reranker import Reranker
+from evaluator import evaluate, print_report
+import openai
+
+reranker = Reranker("mini", top_k_rerank=3)
+
+def retrieve_rerank(query: str, top_k_retrieve: int = 20) -> list[dict]:
+    """
+    双阶段检索：
+    1. Bi-encoder 粗召回 top_k_retrieve 个
+    2. Cross-encoder 重排序取 top-3
+    """
+    # 阶段一：向量检索粗召回
+    query_vec = get_embedding(query)
+    raw_results = chroma_collection.query(
+        query_embeddings=[query_vec],
+        n_results=top_k_retrieve,
+        include=["documents", "metadatas", "distances"],
+    )
+
+    retrieved = []
+    for i in range(len(raw_results["ids"][0])):
+        retrieved.append({
+            "id": raw_results["ids"][0][i],
+            "text": raw_results["documents"][0][i],
+            "score": 1 - raw_results["distances"][0][i],  # 距离转分数
+        })
+
+    # 阶段二：Cross-encoder 精排序
+    return reranker.rerank(query, retrieved)
+
+
+def answer_with_rerank(query: str) -> str:
+    """带重排序的回答管道。"""
+    retrieved = retrieve_rerank(query)
+
+    context = "\n\n".join([
+        f"[来源: {r['id']}] {r['text']}"
+        for r in retrieved
+    ])
+
+    system_prompt = (
+        "你是一个客服助手。请基于以下参考资料回答问题。"
+        "如果资料不足，请明确说"根据现有资料无法确定"而不是猜测。"
+    )
+
+    response = openai.chat.completions.create(
+        model="gpt-4o-mini",
+        temperature=0.0,
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": f"参考资料：\n{context}\n\n问题：{query}"},
+        ],
+    )
+    return response.choices[0].message.content
+
+
+if __name__ == "__main__":
+    # 运行评估对比
+    print("="*50)
+    print("基线评估（仅向量检索）")
+    result_baseline = evaluate(retrieve_only, golden_path="./golden.json")
+    print_report(result_baseline)
+
+    print("\n" + "="*50)
+    print("带重排序的评估")
+    result_rerank = evaluate(retrieve_rerank)
+    print_report(result_rerank)</code></pre>
+
+    <div class="panel good">
+      <h3>你预期会看到的提升</h3>
+      <p>典型的中文客服文档上，加入 Cross-Encoder 重排序通常能带来：</p>
+      <ul>
+        <li><strong>MRR 提升 0.08-0.15</strong>：第一个相关结果的平均排名从 2.5 提升到 1.5 左右</li>
+        <li><strong>Recall@3 提升 0.05-0.10</strong>：更多查询在 top-3 内就包含正确答案</li>
+        <li><strong>最终答案质量显著提升</strong>：因为前 3 个给 LLM 的 chunk 现在都是高质量的</li>
+      </ul>
+      <p>注意：如果你的基线 Recall@5 已经 > 0.95，重排序的提升空间有限——你更应该关注 LLM 的提示词设计和拒绝回答策略。但如果 Recall@5 在 0.6-0.85 之间，重排序是性价比最高的优化手段。</p>
+    </div>
+  </section>
+
+  <section>
+    <h2>第七步：进阶分析——识别检索失败模式</h2>
+    <p>评估不只是为了得到一个数字。更重要的是通过<strong>错误分析</strong>找到系统的薄弱环节。当你拿到第一次评估报告后，把最差的 3-5 个查询拿出来逐条分析——你会发现检索失败通常属于以下几种模式：</p>
+
+    <table>
+      <tr><th>失败模式</th><th>表现</th><th>解决方向</th></tr>
+      <tr>
+        <td><strong>同义词鸿沟</strong></td>
+        <td>用户说"退款"文档用"退费"，embedding 没匹配上</td>
+        <td>换更大的 embedding 模型；增加同义词扩展</td>
+      </tr>
+      <tr>
+        <td><strong>跨 chunk 答案</strong></td>
+        <td>答案分散在多个 chunk 中，任何一个单独都不够</td>
+        <td>增大 chunk_size 或 overlap；增加检索数量 top-K</td>
+      </tr>
+      <tr>
+        <td><strong>粒度错配</strong></td>
+        <td>用户问的是概括性问题，chunk 是细粒度段落</td>
+        <td>加入摘要/分层索引；用 LLM 聚合多个 chunk</td>
+      </tr>
+      <tr>
+        <td><strong>关键词覆盖不足</strong></td>
+        <td>查询包含生僻词或英文缩写（如"SKU"、"SKU123456"）</td>
+        <td>混合检索（向量 + 关键词 BM25）</td>
+      </tr>
+      <tr>
+        <td><strong>无相关文档</strong></td>
+        <td>问题确实不在知识库范围内</td>
+        <td>✅ 这是正确行为——应该拒绝回答</td>
+      </tr>
+    </table>
+
+    <p>你可以把错误分析写成一个函数（甚至集成到 evaluator.py 中）：</p>
+    <pre><code>def analyze_failures(details: list[dict], threshold: float = 0.5) -> list[dict]:
+    """找出 MRR 低于阈值的查询并分类"""
+    failures = [d for d in details if d.get("mrr", 0) < threshold]
+    for f in failures:
+        # 初步分类逻辑——根据检索结果和预期之间的 overlap 大小
+        retrieved = set(f["retrieved_ids"][:5])
+        relevant = set(f["relevant_ids"])
+        overlap = len(retrieved & relevant)
+        if overlap == 0:
+            f["failure_type"] = "完全漏检"
+        elif f["mrr"] < 0.2:
+            f["failure_type"] = "排名严重靠后"
+        else:
+            f["failure_type"] = "部分漏检"
+    return failures</code></pre>
+  </section>
+
+  <section>
+    <h2>练习：动手改进你的 RAG 检索</h2>
+
+    <div class="quiz" id="quiz1">
+      <h3>练习一：选择题</h3>
+      <p>如果你的 Recall@3 = 0.75，MRR = 0.60，以下哪个解读<strong>最准确</strong>？</p>
+      <button data-answer="wrong">说明重排序已经不需要了，应该先优化 LLM 提示词</button>
+      <button data-answer="wrong">说明 75% 的查询前 3 个结果全部正确，25% 完全失败</button>
+      <button data-answer="right">说明在 25% 的查询中，正确答案不在前 3 个；同时即使在前 3 个里的，平均排名也不是第 1 而是大约第 1.7，MRR 反映了这个差距</button>
+    </div>
+    <p class="feedback" id="feedback1"></p>
+
+    <div class="task panel">
+      <h3>练习二：标注你的测试集</h3>
+      <p>在你的文档库上创建 <code>golden.json</code>，包含至少 10 个查询：</p>
+      <ol>
+        <li>5 个"简单"查询——关键词匹配就能找到（如"退款到账几天"）</li>
+        <li>3 个"中等"查询——需要语义理解（如"我买了东西不想要了"）</li>
+        <li>2 个"困难"查询——需要精确推理（如"拆封了但商品有质量问题，能不能换货？运费谁出？"）</li>
+      </ol>
+      <p>每个查询标注 1-3 个相关 chunk 的 ID（去 <code>docs/</code> 里找到对应段落）。保存为 <code>golden.json</code> 后运行第一次基线评估。</p>
+    </div>
+
+    <div class="task panel">
+      <h3>练习三：对比实验</h3>
+      <p>运行以下三组实验并记录结果：</p>
+      <table>
+        <tr><th>实验</th><th>top_k_retrieve</th><th>是否重排序</th><th>预期效果</th></tr>
+        <tr><td>A</td><td>10</td><td>否</td><td>基线——默认向量检索</td></tr>
+        <tr><td>B</td><td>20</td><td>是（mini 模型）</td><td>重排序后 MRR 应提升</td></tr>
+        <tr><td>C</td><td>20</td><td>是（base 模型）</td><td>如果 mini 提升不够，试试 base</td></tr>
+      </table>
+      <p>关键观察：重排序之后，你的 MRR 提升了多少？最差的查询变成了哪些？把评估结果（<code>result["details"]</code> 中的 JSON）和你的分析发给我，我们一起看怎么进一步优化。</p>
+    </div>
+
+    <div class="quiz" id="quiz2">
+      <h3>练习四：选择题</h3>
+      <p>重排序最适合解决以下哪个问题？</p>
+      <button data-answer="wrong">Chunk 太多导致向量数据库查询慢</button>
+      <button data-answer="right">检索结果中正确答案排得太靠后，因为 embedding 相似度无法精确区分细微语义差异</button>
+      <button data-answer="wrong">LLM 生成的回答太长</button>
+    </div>
+    <p class="feedback" id="feedback2"></p>
+  </section>
+
+  <section>
+    <h2>你现在应该记住的五句话</h2>
+    <ol>
+      <li><strong>没有量化评估，就没有真正的优化。</strong>肉眼评估在 3 个查询以内就失效了——你无法判断"这次改动是变好了还是变坏了"。</li>
+      <li><strong>Recall@K 是 RAG 评估的基石指标。</strong>它回答最基本的问题："答案在不在前 K 个结果里？" MRR 补充回答："在的话，排第几？"</li>
+      <li><strong>10 条标注查询就足够驱动你的第一次评估。</strong>别追求完美的测试集——粗糙的基线 + 逐步迭代远好于完美的计划但从不执行。</li>
+      <li><strong>重排序是性价比最高的检索优化手段。</strong>Bi-encoder + Cross-encoder 双阶段设计，用不到 20% 的额外计算成本换取 5-15% 的 MRR 提升。</li>
+      <li><strong>评估 + 错误分析 = 优化的方向盘。</strong>分数告诉你"差了多少"，错误分析告诉你"差在哪里"。两者结合，你才能有方向地迭代。</li>
+    </ol>
+  </section>
+
+  <section>
+    <h2>接下来学什么</h2>
+    <p>现在你有了评估工具和重排序技术，你的 RAG 系统从"能用"变成了"可量化、可优化"。但还有几个新问题等着你：</p>
+    <ul>
+      <li><strong>混合检索</strong>：向量检索（语义） + 关键词检索（BM25 精确匹配）双路召回，再用重排序融合——适合需要精确匹配 SKU、型号、订单号的企业场景。</li>
+      <li><strong>多模型对比</strong>：text-embedding-3-small vs BGE vs Cohere vs Jina——你的中文文档到底适合哪个？评估器让你能做数据驱动的决策。</li>
+      <li><strong>高级 RAG 架构</strong>：Self-RAG、Corrective RAG（CRAG）、Agentic RAG——当简单检索-生成架构不够用时，这些进阶模式如何解决。</li>
+    </ul>
+    <p>下一课将进入 <strong>混合检索与多路召回融合</strong>：引入 BM25 关键词检索，实现向量 + 关键词双路召回，再用你的重排序器融合——这是企业级知识库应对长尾问题的关键能力。</p>
+    <p>复习用速查表：<a href="../reference/0004-检索评估与重排序-cheatsheet.html">检索评估与重排序速查表</a>。回顾上一课：<a href="0003-doc-parsing-chunking.html">第 3 课：文档解析与切块</a>。回顾基础 Demo：<a href="0002-rag-python-demo.html">第 2 课：Python Demo</a>。</p>
+    <p class="small">有任何不清楚的地方——评估指标算不明白、重排序效果不明显、标注不知道该怎么做——直接问我。把你的评估报告 JSON 和错误分析贴给我，我帮你诊断。</p>
+  </section>
+</main>
+
+<script>
+  function setupQuiz(quizId, feedbackId) {
+    const quiz = document.getElementById(quizId);
+    const feedback = document.getElementById(feedbackId);
+    quiz.addEventListener("click", (event) => {
+      const button = event.target.closest("button");
+      if (!button) return;
+      const allButtons = quiz.querySelectorAll("button");
+      allButtons.forEach((item) => item.classList.remove("correct", "wrong"));
+      if (button.dataset.answer === "right") {
+        button.classList.add("correct");
+        if (quizId === "quiz1") {
+          feedback.textContent = "✓ 正确。Recall@3=0.75 意味着 25% 的查询答案不在前 3；MRR=0.60 ≈ 平均第一个正确结果排在第 1.67 位，说明即使在前 3 里也不是总能排第一。两个指标互补，Recall 看覆盖，MRR 看排名。";
+        } else {
+          feedback.textContent = "✓ 正确。Cross-encoder 的精髓是能捕捉 token 级别的交互信息，区分"拆封了不能退"和"拆封了但有质量问题可以退"这种细微差异——这是 bi-encoder 做不到的。";
+        }
+        feedback.style.color = "var(--good)";
+      } else {
+        button.classList.add("wrong");
+        if (quizId === "quiz1") {
+          feedback.textContent = "再想想：Recall@K 是比例而不是二元判断，MRR 和 Recall 一起看才能全面理解检索质量。Recall@3=0.75 意味着有 25% 的查询没找到答案，而不是 75% 的查询全部正确。";
+        } else {
+          feedback.textContent = "再想想：重排序解决的是语义匹配精度问题，不是性能问题。它的输入是向量检索的结果，输出是对这些结果重新打分排序。查询速度瓶颈不在重排序这一步。";
+        }
+        feedback.style.color = "var(--bad)";
+      }
+    });
+  }
+  setupQuiz("quiz1", "feedback1");
+  setupQuiz("quiz2", "feedback2");
+</script>
+
+</body>
+</html>
