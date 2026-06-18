@@ -31,4 +31,4 @@ The learner can now evaluate RAG answer quality using four RAGAS-inspired metric
 - No production monitoring setup — the batch evaluation is manual, not integrated into a CI/CD pipeline
 - Context Precision/Recall scores may be noisy because they depend on the LLM judge's understanding of the domain
 
-**Next suggested topic:** RAG refusal strategies (when to say "I don't know") and fallback mechanisms — the learner now has the evaluation framework to detect when the knowledge base lacks answers, and needs the system design to handle those cases gracefully.
+**Next suggested topic:** RAG 技术栈全景图（L8）——学习者已用 Chroma + OpenAI 跑通完整链路，但尚未了解语言选择、框架选型、向量库替代方案、各类模型的全景对比。建立全局认知后再依次进入拒绝策略（L9）、对话式 RAG（L10）、Prompt Engineering（L11）和 Embedding 选型（L12）。
