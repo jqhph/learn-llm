@@ -993,17 +993,17 @@ for k in [10, 30, 60, 100, 200]:
       if (button.dataset.answer === "right") {
         button.classList.add("correct");
         if (quizId === "quiz1") {
-          feedback.textContent = "✓ 正确。精确匹配场景（订单号 SKU 型号）是向量检索的已知弱项——tokenization 会把"DY20241001"切成子词，丢失精确匹配信息。BM25 恰恰相反，它完美匹配这个精确 token。";
+          feedback.textContent = "✓ 正确。精确匹配场景（订单号 SKU 型号）是向量检索的已知弱项——tokenization 会把“DY20241001”切成子词，丢失精确匹配信息。BM25 恰恰相反，它完美匹配这个精确 token。";
         } else if (quizId === "quiz2") {
           feedback.textContent = "✓ 正确。RRF 只看排名不看分数绝对值，所以它天然适用于融合任何异构排序器——不管分数是从 -1 到 1 还是从 0 到无穷大。";
         } else {
-          feedback.textContent = "✓ 正确。查询重写成本最低、收益稳定，是默认开启的最佳选择。短查询追加 Multi-Query 以增加召回覆盖面。HyDE 更适合需要生成完整语义的模糊查询，对"拆封能不能退"这种已经很具体的查询没有额外收益。";
+          feedback.textContent = "✓ 正确。查询重写成本最低、收益稳定，是默认开启的最佳选择。短查询追加 Multi-Query 以增加召回覆盖面。HyDE 更适合需要生成完整语义的模糊查询，对“拆封能不能退”这种已经很具体的查询没有额外收益。";
         }
         feedback.style.color = "var(--good)";
       } else {
         button.classList.add("wrong");
         if (quizId === "quiz1") {
-          feedback.textContent = "再想想：订单号"DY20241001"是一个精确的 token 匹配场景。向量检索会把订单号切碎成子词后再做 embedding，丢失了精确匹配的能力。BM25 对这种精确匹配最为擅长。";
+          feedback.textContent = "再想想：订单号“DY20241001”是一个精确的 token 匹配场景。向量检索会把订单号切碎成子词后再做 embedding，丢失了精确匹配的能力。BM25 对这种精确匹配最为擅长。";
         } else if (quizId === "quiz2") {
           feedback.textContent = "再想想：RRF 的核心优势是 rank-based——它不需要理解或归一化不同排序器的分数分布。想象一下 cosine similarity 范围 [-1,1] 和 BM25 score [0, 50+] 相加，不归一化会怎样？RRF 巧妙地绕过了这个问题。";
         } else {

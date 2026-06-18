@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>速查表：生产级多源检索架构</title>
+  <style>
+    :root { color-scheme: light; --ink:#172033; --muted:#667085; --line:#d7dde8; --bg:#fbfcfe; }
+    * { box-sizing: border-box; }
+    body { margin:0; font-family: ui-sans-serif, system-ui, -apple-system, sans-serif; color:var(--ink); background:var(--bg); line-height:1.6; font-size:14px; }
+    main { max-width:1000px; margin:0 auto; padding:28px 18px; }
+    h1 { font-size:22px; margin:0 0 8px; }
+    h2 { font-size:17px; margin:20px 0 8px; border-bottom:1px solid var(--line); padding-bottom:4px; }
+    h3 { font-size:15px; margin:14px 0 6px; }
+    p { margin:0 0 10px; }
+    table { border-collapse:collapse; width:100%; margin:10px 0; font-size:13px; }
+    th, td { border:1px solid var(--line); padding:5px 8px; text-align:left; }
+    th { background:#f6f8fa; font-weight:600; }
+    code { background:#eef6f5; padding:1px 4px; border-radius:3px; font-size:0.92em; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    pre { background:#f6f8fa; border:1px solid var(--line); border-radius:6px; padding:10px; font-size:12px; line-height:1.5; overflow-x:auto; }
+    .tag { display:inline-block; font-weight:600; font-size:11px; padding:2px 6px; border-radius:3px; margin:0 2px; background:#edf8ef; color:#116329; }
+    .tag.warn { background:#fff8ed; color:#8b5e00; }
+    .tag.bad { background:#fff0f2; color:#a10e25; }
+    .box { border:1px solid var(--line); border-radius:6px; padding:10px; margin:8px 0; }
+    .box.good { border-left:3px solid #116329; }
+    .box.warn { border-left:3px solid #8b5e00; }
+    .grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin:8px 0; }
+    @media print { body { background:white; } .grid { break-inside:avoid; page-break-inside:avoid; } }
+  </style>
+</head>
+<body>
+<main>
+  <h1>📋 生产级多源检索架构速查表</h1>
+  <p style="color:#667085">第 6 课配套参考 | 企业级客服 RAG 系统的数据源策略</p>
+
+  <h2>一、数据分水岭</h2>
+  <table>
+    <tr><th>类型</th><th>适合向量库？</th><th>适合 BM25/ES？</th><th>推荐存储</th><th>量级</th></tr>
+    <tr><td>知识文档（政策、说明、FAQ）</td><td><span class="tag">✅ 核心</span></td><td><span class="tag">✅</span></td><td>向量库 (Chroma/Pinecone/Qdrant)</td><td>千~百万</td></tr>
+    <tr><td>产品库（SKU、规格）</td><td><span class="tag">⚠️ 可选</span></td><td><span class="tag">✅ 核心</span></td><td>Elasticsearch 全文搜索</td><td>万~千万</td></tr>
+    <tr><td>订单记录</td><td><span class="tag bad">❌ 不行</span></td><td><span class="tag bad">❌ 不行</span></td><td>MySQL/PostgreSQL（源库）</td><td>百万~亿</td></tr>
+    <tr><td>物流轨迹</td><td><span class="tag bad">❌ 不行</span></td><td><span class="tag bad">❌ 不行</span></td><td>专用系统 API</td><td>亿级</td></tr>
+    <tr><td>用户评价</td><td><span class="tag">✅ 可以</span></td><td><span class="tag">✅ 推荐</span></td><td>ES 全文搜索 + 向量可做补充</td><td>百万~千万</td></tr>
+  </table>
+
+  <h2>二、四种架构模式对比</h2>
+  <table>
+    <tr><th>模式</th><th>核心机制</th><th>适合场景</th><th>复杂度</th><th>安全性</th><th>推荐工具</th></tr>
+    <tr><td><strong>查询路由</strong></td><td>分类意图 → 不同管道</td><td>意图清晰、分类边界明确</td><td>🟢 低</td><td>🟢 低风险</td><td>LLM 分类 / 规则引擎 / 小模型</td></tr>
+    <tr><td><strong>Function Calling</strong></td><td>LLM 调用注册函数获取数据</td><td>需要动态查询多个数据源</td><td>🟡 中</td><td>🟢 可控</td><td>OpenAI tools / Anthropic tool use</td></tr>
+    <tr><td><strong>NL2SQL</strong></td><td>LLM 生成 SQL 执行</td><td>同一数据源、灵活过滤条件</td><td>🔴 高</td><td>🔴 高风险管理</td><td>GPT-4 / Claude + 只读用户</td></tr>
+    <tr><td><strong>联邦检索</strong></td><td>查询分解 → 多源并行 → 融合</td><td>需同时查 4+ 异构数据源</td><td>🔴 高</td><td>🟡 中</td><td>LlamaIndex / LangChain / 自研</td></tr>
+  </table>
+
+  <h2>三、代码片段速查</h2>
+
+  <h3>1. 查询路由分类</h3>
+  <pre><code>INTENT_PROMPT = "判断意图(kb|order|sku|other)：{query}"
+intent = llm(INTENT_PROMPT.format(query=query))
+
+if intent == "kb":    ret = vector_search(query)
+elif intent == "order": ret = order_api(extract_order_no(query))
+elif intent == "sku":  ret = product_db(extract_sku(query))</code></pre>
+
+  <h3>2. Function Calling 定义</h3>
+  <pre><code>tools = [{
+    "type": "function",
+    "function": {
+        "name": "query_order",
+        "description": "查询订单状态",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "order_no": {"type": "string"}
+            },
+            "required": ["order_no"]
+        }
+    }
+}]</code></pre>
+
+  <h3>3. NL2SQL 安全模板</h3>
+  <pre><code># 1. 只读数据库用户
+# 2. 参数化查询（禁止拼接字符串）
+# 3. 自动追加 LIMIT
+# 4. 执行超时 5s
+# 5. schema 中不暴露 PII 列
+sql = llm(SYSTEM + user_query)
+assert sql.upper().startswith("SELECT")
+rows = db.execute(sql, timeout=5)</code></pre>
+
+  <h3>4. 订单号提取（正则优先）</h3>
+  <pre><code>def extract_order_no(query: str) -> str|None:
+    for pat in [r'SK\d{6,}', r'ORD\d{6,}', r'\b\d{10,}\b']:
+        if m := re.search(pat, query):
+            return m.group()
+    return llm_extract(query)  # 兜底</code></pre>
+
+  <h2>四、生产架构部署检查清单</h2>
+  <table>
+    <tr><th>检查项</th><th>要求</th></tr>
+    <tr><td>向量库数据范围</td><td>只含知识型/参考型数据，不含事务型数据</td></tr>
+    <tr><td>订单查询方式</td><td>API / Function Calling 直连订单服务，不经过向量库</td></tr>
+    <tr><td>用户隐私</td><td>姓名、电话、地址不出现在持久化存储的向量库中</td></tr>
+    <tr><td>NL2SQL 安全防护</td><td>只读用户 + 参数化查询 + LIMIT + 超时 + 敏感列脱敏</td></tr>
+    <tr><td>路由兜底</td><td>无法分类时走人工或通用 FAQ 搜索，不返回空结果</td></tr>
+    <tr><td>正则 + LLM 分层</td><td>结构化提取（订单号/SKU）先正则、后 LLM，不只用 LLM</td></tr>
+    <tr><td>审计日志</td><td>每次订单/用户数据查询记录在案，可追溯</td></tr>
+  </table>
+
+  <h2>五、关键词中英文对照</h2>
+  <table>
+    <tr><th>中文</th><th>English</th><th>说明</th></tr>
+    <tr><td>查询路由</td><td>Query Routing / Intent Routing</td><td>先判断意图再分发到不同处理管道</td></tr>
+    <tr><td>函数调用</td><td>Function Calling / Tool Use</td><td>LLM 调用外部函数获取数据</td></tr>
+    <tr><td>自然语言转 SQL</td><td>NL2SQL / Text-to-SQL</td><td>自然语言生成 SQL 查询</td></tr>
+    <tr><td>联邦检索</td><td>Federated Retrieval</td><td>并行查询多个异构数据源并融合结果</td></tr>
+    <tr><td>数据分水岭</td><td>Data Divide / Data Boundary</td><td>知识型 vs 事务型数据的存储决策边界</td></tr>
+    <tr><td>只读副本</td><td>Read Replica</td><td>用于 NL2SQL 查询的生产库只读镜像</td></tr>
+    <tr><td>查询分解</td><td>Query Decomposition</td><td>将复杂查询分解为多个子查询</td></tr>
+  </table>
+</main>
+</body>
+</html>

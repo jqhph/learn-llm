@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>第 6 课：答案质量评估与 RAGAS —— 从"检得准"到"答得好"</title>
+  <title>第 7 课：答案质量评估与 RAGAS —— 从"检得准"到"答得好"</title>
   <style>
     :root {
       color-scheme: light;
@@ -61,7 +61,7 @@
 <body>
 <main>
   <header>
-    <div class="kicker">Lesson 0006</div>
+    <div class="kicker">Lesson 0007</div>
     <h1>答案质量评估与 RAGAS：从"检得准"到"答得好"</h1>
     <p class="lede">本课目标：你已能用 Recall@K 证明检索质量。但好的检索是否必然带来好的答案？本课教你用 Faithfulness、Answer Relevancy 等指标量化答案质量，建立 RAG 系统的"最终质检关"。</p>
   </header>
@@ -76,7 +76,7 @@
       <li>对 <strong>LLM-as-a-Judge 的元认知</strong>：它的偏差、成本、可靠性，以及何时该用人</li>
     </ul>
     <p>这是你的 RAG 从 "检得准" 到 "答得好" 的关键一跃——也是你判断系统是否真正可用的最终标准。</p>
-    <p class="small">推荐阅读：<a href="https://docs.ragas.io/">RAGAS 官方文档</a>、<a href="https://arxiv.org/abs/2309.15217">RAGAS 论文（Es et al., 2023）</a>。回顾上一课：<a href="0005-混合检索与查询转换.html">第 5 课：混合检索与查询转换</a>。速查表：<a href="../reference/0006-答案质量评估与RAGAS-cheatsheet.html">答案质量评估速查表</a>。</p>
+    <p class="small">推荐阅读：<a href="https://docs.ragas.io/">RAGAS 官方文档</a>、<a href="https://arxiv.org/abs/2309.15217">RAGAS 论文（Es et al., 2023）</a>。回顾上一课：<a href="0006-生产级多源检索架构.html">第 6 课：生产级多源检索架构</a>。速查表：<a href="../reference/0007-答案质量评估与RAGAS-cheatsheet.html">答案质量评估速查表</a>。</p>
   </section>
 
   <section>
@@ -845,12 +845,16 @@ if __name__ == "__main__":
     <p>你现在拥有了完整的 RAG 评估体系：</p>
     <ul>
       <li>第 4 课：检索质量评估（Recall@K, MRR）——你的检索系统"检到了吗"</li>
-      <li>第 6 课：答案质量评估（Faithfulness, Relevancy, Precision, Recall）——你的 LLM "答好了吗"</li>
+      <li>第 5 课：混合检索与查询转换（向量 + BM25 + RRF）——如何"灵活地检索"</li>
+      <li>第 6 课：生产级多源检索架构（查询路由、Function Calling）——事务型数据"不该进向量库"</li>
+      <li>第 7 课：答案质量评估（Faithfulness, Relevancy, Precision, Recall）——你的 LLM "答好了吗"</li>
     </ul>
-    <p>下一步，你应该考虑：当用户的问题无法从知识库中找到答案时，系统应该如何优雅地处理？或者，如何让 RAG 系统处理"需要多轮对话"的复杂查询？</p>
-    <p>可能的下一课主题：《RAG 的拒绝策略与兜底机制》——在你本课的评估中，如果发现大量查询的 Context Precision 或 Context Recall 很低，说明知识库可能缺少相关内容，你需要引入"不知道就说不知道"机制。</p>
+    <p>下一步，你应该考虑：当所有检索手段都返回不了有用信息时，系统应该如何优雅地应对？</p>
+    <p>一个负责任的 RAG 系统需要知道什么时候该说"不知道"——而非硬撑一个幻觉回答。在你本课的评估中，如果发现大量查询的 Context Precision 或 Context Recall 很低，说明知识库可能缺少相关内容，你需要引入<strong>"不知道就说不知道"</strong>机制。</p>
+    <p>可能的下一课主题：<strong>《RAG 的拒绝策略与兜底机制》</strong>——涵盖不确定性校准、低分查询的兜底响应、人工转接策略、以及如何在"不回答"和"硬答"之间找到产品可接受的平衡点。</p>
+    <p class="small">如果你现在已经在你的系统中发现了"硬答"的问题，不妨告诉我——我可以提前帮你分析你的评估数据中哪些查询适合走拒绝策略。</p>
 
-    <p class="small" style="margin-top: 30px;">有疑问？随时问我——我会帮你调试评估结果、设计 golden dataset，或者讨论你的具体场景最适合哪些指标组合。本课速查表：<a href="../reference/0006-答案质量评估与RAGAS-cheatsheet.html">答案质量评估与 RAGAS 速查表</a>。</p>
+    <p class="small" style="margin-top: 30px;">有疑问？随时问我——我会帮你调试评估结果、设计 golden dataset，或者讨论你的具体场景最适合哪些指标组合。本课速查表：<a href="../reference/0007-答案质量评估与RAGAS-cheatsheet.html">答案质量评估与 RAGAS 速查表</a>。</p>
   </section>
 </main>
 

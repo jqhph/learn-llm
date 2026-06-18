@@ -1,0 +1,805 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>第 6 课：生产级多源检索架构 —— 为什么订单号不该进向量库</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink:#172033; --muted:#667085; --line:#d7dde8; --accent:#0f766e;
+      --accent2:#8b5e00; --good:#116329; --bad:#a10e25; --bg:#fbfcfe; --panel:#fff;
+    }
+    * { box-sizing: border-box; }
+    body { margin:0; font-family: ui-serif, Georgia, "Noto Serif SC", serif; color:var(--ink); background:var(--bg); line-height:1.7; }
+    main { max-width: 960px; margin: 0 auto; padding: 42px 22px 70px; }
+    header { margin-bottom: 30px; }
+    .kicker { font: 700 13px/1.2 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color:var(--accent); text-transform: uppercase; letter-spacing: .08em; }
+    h1 { font-size: clamp(32px, 5vw, 54px); line-height:1.08; margin: 10px 0 12px; letter-spacing:0; }
+    h2 { font-size: 23px; margin: 34px 0 12px; padding-bottom: 6px; border-bottom:1px solid var(--line); }
+    h3 { font-size: 18px; margin: 20px 0 8px; }
+    h4 { font-size: 16px; margin: 14px 0 6px; }
+    p { margin: 0 0 14px; }
+    a { color:#0b5cad; text-decoration-thickness:1px; text-underline-offset:3px; }
+    .lede { color:var(--muted); max-width:780px; font-size:18px; }
+    .panel { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:18px; margin:16px 0; }
+    .panel.good { border-left:4px solid var(--good); }
+    .panel.warn { border-left:4px solid var(--accent2); }
+    .panel.info { border-left:4px solid var(--accent); }
+    .panel.danger { border-left:4px solid var(--bad); }
+    code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    code { background:#eef6f5; padding:2px 5px; border-radius:4px; font-size:0.92em; }
+    pre { overflow-x:auto; background:#f6f8fa; color:var(--ink); border:1px solid var(--line); border-radius:8px; padding:16px; font-size:14px; line-height:1.55; }
+    .small { color:var(--muted); font-size:14px; }
+    table { border-collapse:collapse; width:100%; margin:14px 0; }
+    th, td { border:1px solid var(--line); padding:8px 12px; text-align:left; font-size:15px; }
+    th { background:#f6f8fa; font-weight:700; }
+    ul, ol { padding-left:22px; }
+    .combo { display:grid; grid-template-columns: 1fr 1fr; gap:14px; margin:16px 0; }
+    .flow { display:flex; align-items:center; gap:6px; flex-wrap:wrap; justify-content:center; margin:16px 0; }
+    .flow-box { border:1px solid var(--line); border-radius:6px; padding:8px 14px; background:var(--panel); font-size:14px; text-align:center; }
+    .flow-box.highlight { border-color:var(--accent); background:#eef6f5; }
+    .flow-arrow { font-size:20px; color:var(--muted); }
+    .arch { display:flex; flex-direction:column; gap:6px; margin:16px 0; }
+    .arch-row { display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+    .arch-box { border:1px solid var(--line); border-radius:6px; padding:6px 12px; background:var(--panel); font-size:13px; border-left:3px solid var(--accent); }
+    .arch-box.mysql { border-left-color:#00758f; }
+    .arch-box.es { border-left-color:#fbbc04; }
+    .arch-box.vector { border-left-color:#0f766e; }
+    .arch-box.api { border-left-color:#8b5e00; }
+    .arch-box.llm { border-left-color:#172033; }
+    .tag { display:inline-block; font:600 11px/1.2 ui-sans-serif; padding:2px 7px; border-radius:4px; margin:0 3px; }
+    .tag.good { background:#edf8ef; color:var(--good); }
+    .tag.warn { background:#fff8ed; color:var(--accent2); }
+    .tag.bad { background:#fff0f2; color:var(--bad); }
+    @media (max-width: 640px) { .combo { grid-template-columns: 1fr; } }
+    @media print { body { background:white; } main { max-width:none; padding:20mm; } .panel { break-inside: avoid; } }
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <div class="kicker">Lesson 0006</div>
+    <h1>生产级多源检索架构：为什么订单号不该进向量库</h1>
+    <p class="lede">本课目标：理解为什么"把所有数据塞进向量库"不是生产级方案，掌握四种生产级多源检索架构模式，学会在真实的客服系统中正确路由查询到相应的数据源。</p>
+  </header>
+
+  <section>
+    <h2>课程 0005 没有告诉你的</h2>
+
+    <p>回顾课程 0005，我们讲混合检索时用了这样的例子：</p>
+
+    <div class="panel warn">
+      <p>"订单号 SK20240615 现在什么状态？" → BM25 精确匹配 SK20240615</p>
+      <p>"发票代码 3701256712 查不到" → BM25 精确匹配 3701256712</p>
+    </div>
+
+    <p>这些例子的前提条件是：<strong>订单号和发票代码已经在知识库的文本中存在</strong>。教程里确实是这样写的：</p>
+
+    <pre><code>{"id": "sku-0", "text": "SK20240615 订单目前状态为：已发货，预计 3-5 个工作日送达。"}
+{"id": "invoice-0", "text": "发票代码 3701256712 的发票已开具，可登录官网下载。"}</code></pre>
+
+    <p>但你立刻发现了问题：<strong>现实中，订单号和SKU都存储在MySQL里，可能有上千万甚至上亿条记录。</strong></p>
+
+    <p>—— "难道都得切块向量化存进向量库？"</p>
+
+    <p><strong>答案：绝对不能。</strong></p>
+
+    <div class="panel danger">
+      <h3>把订单数据塞进向量库的后果</h3>
+      <ul>
+        <li><strong>成本爆炸</strong>：1 亿条订单，每条 embedding 约 1536 维 float32 = 6KB，仅向量存储就需要 <strong>~60 GB</strong>，还不算原始文本。embedding API 调用费用另计。</li>
+        <li><strong>实时性灾难</strong>：订单在持续写入、状态变化。每次新订单都要跑 embedding→写入→建立 BM25 索引。BM25 是内存索引，重构建开销极大。</li>
+        <li><strong>检索精度灾难</strong>：搜索"SK20240615"时，向量检索会把"SK"和"20240615"切成子词，可能返回"SK20240616"甚至"2000 年 SK 公司成立"——语义相似但完全无关。</li>
+        <li><strong>安全灾难</strong>：订单包含用户隐私（姓名、地址、电话），不能放进向量库——后者缺乏列级权限控制和细粒度审计。</li>
+      </ul>
+    </div>
+
+    <p>课程 0005 的 BM25 例子在<strong>教学层面是对的</strong>——它讲的是关键词检索的机制。但在<strong>架构层面</strong>，你问出了所有 RAG 教程都回避的关键问题：<strong>事务型数据到底该怎么接入 RAG 系统？</strong></p>
+
+    <p class="small">回顾：<a href="0005-混合检索与查询转换.html">第 5 课：混合检索与查询转换</a>。本课也直接关联 <a href="0007-答案质量评估与RAGAS.html">第 7 课</a>——如果不能从正确的源拿到数据，评估指标再好看也没有用。</p>
+  </section>
+
+  <section>
+    <h2>核心脑图：数据分水岭</h2>
+
+    <p>在开始架构设计之前，你首先要理解企业数据的两大类——它们在接入 RAG 系统的方式完全不同：</p>
+
+    <table>
+      <tr><th>数据类型</th><th>例子</th><th>数据量级</th><th>变动频率</th><th>接入方案</th></tr>
+      <tr><td><strong>知识型 / 参考型</strong></td><td>售后政策、产品说明、操作手册、FAQ、法律法规</td><td>千 ~ 百万级</td><td>低（周/月更新）</td><td>✅ 向量库 + BM25</td></tr>
+      <tr><td><strong>事务型 / 记录型</strong></td><td>订单、SKU 库存、物流轨迹、用户账户、发票记录</td><td>百万 ~ 亿级</td><td>极高（秒/分钟级变更）</td><td>❌ 不应入向量库</td></tr>
+    </table>
+
+    <div class="panel info">
+      <h3>一个简单的判断标准</h3>
+      <p>问自己：<strong>"用户查这条数据，是为了读它的内容，还是为了查它的状态？"</strong></p>
+      <ul>
+        <li><strong>读内容</strong>：退货政策是什么？Wi-Fi 模块的规格？→ <strong>适合向量库</strong>（文本相似度搜索）</li>
+        <li><strong>查状态</strong>：我的订单到哪了？这个 SKU 还有库存吗？→ <strong>不适合向量库</strong>（需要精确查询+实时数据）</li>
+      </ul>
+    </div>
+
+    <p>也就是说，课程 0005 的 BM25 例子并非"错误"，而是"放错了场景"。真正的生产架构是：<strong>把查询路由到正确的数据源</strong>，而不是把所有数据揉进一个索引。</p>
+  </section>
+
+  <section>
+    <h2>生产级四种架构模式</h2>
+
+    <p>以下是企业级 RAG 客服系统中最常用的四种模式，它们按复杂度从低到高排列。前两种你很快可以落地，后两种在数据源增多时自然会演化出来。</p>
+
+    <h3>模式一：查询路由（Intent Routing）</h3>
+
+    <div class="flow">
+      <span class="flow-box">用户查询</span>
+      <span class="flow-arrow">→</span>
+      <span class="flow-box highlight">路由分类器</span>
+      <span class="flow-arrow">→</span>
+      <span class="arch-box vector">知识库检索</span>
+      <span class="flow-arrow">→</span>
+      <span class="flow-box">LLM 回答</span>
+    </div>
+    <div class="flow" style="margin-top:0">
+      <span class="flow-box" style="visibility:hidden">用户查询</span>
+      <span class="flow-arrow" style="visibility:hidden">→</span>
+      <span class="flow-box highlight" style="visibility:hidden">路由分类器</span>
+      <span class="flow-arrow">→</span>
+      <span class="arch-box mysql">查询订单 API / DB</span>
+      <span class="flow-arrow">→</span>
+      <span class="flow-box">直接返回</span>
+    </div>
+
+    <p><strong>这不是什么新技术——它在客服行业存在了几十年</strong>。在现代 RAG 中，我们只是用一个分类模型（传统分类器或 LLM）来判断用户的意图，然后路由到不同的处理管道。</p>
+
+    <p>最朴素的实现——用 LLM 做分类：</p>
+
+    <pre><code>"""query_router.py — 最简单的意图路由"""
+import openai
+import json
+
+class QueryRouter:
+    """
+    根据用户查询的意图，路由到对应的处理模块。
+
+    支持三种路由目标：
+    - "kb":   知识库问题 → 走向量检索 (RAG)
+    - "order": 订单查询 → 查订单数据库
+    - "sku":   SKU/产品查询 → 查产品数据库
+    """
+
+    ROUTING_PROMPT = """判断用户查询属于哪一类，只输出一个词：
+- kb:    知识、政策、说明类问题（如退货政策、如何使用、功能介绍）
+- order: 订单相关（含订单号、物流、发票）
+- sku:   商品/产品相关（含SKU、型号、规格参数）
+- other: 其他
+
+用户查询：{query}
+
+分类结果："""
+
+    def route(self, query: str) -> str:
+        """返回 'kb' | 'order' | 'sku' | 'other'"""
+        prompt = self.ROUTING_PROMPT.format(query=query)
+        response = openai.chat.completions.create(
+            model="gpt-4o-mini",
+            temperature=0.0,
+            max_tokens=10,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        intent = response.choices[0].message.content.strip().lower()
+        return intent if intent in ("kb", "order", "sku") else "other"
+
+    def handle(self, query: str):
+        """路由并调用对应的处理器"""
+        intent = self.route(query)
+
+        if intent == "kb":
+            # → 走标准 RAG：向量检索 + LLM 生成
+            return self._handle_kb(query)
+        elif intent == "order":
+            # → 调用订单服务 API / 查 MySQL
+            order_no = self._extract_order_no(query)
+            return self._query_order(order_no)
+        elif intent == "sku":
+            # → 调用产品服务 API / 查 MySQL
+            sku_code = self._extract_sku(query)
+            return self._query_product(sku_code)
+        else:
+            return self._handle_fallback(query)</code></pre>
+
+    <div class="panel good">
+      <h3>为什么这么"简单"就够用了？</h3>
+      <p>因为意图分类是<strong>一个极其简单的任务</strong>——比总结文档或写代码简单得多。即使只用一个 8B 的开源模型（如 Qwen2.5-7B）也能做到 &gt;95% 的准确率。一些企业甚至使用基于关键词的模式匹配（规则引擎）做初筛，只对不确定的查询才调用 LLM。</p>
+      <p>注意：路由分类器只做分类，不回答具体业务问题。这意味着你可以为它选择一个<strong>便宜、快速</strong>的模型——甚至可以在边缘端部署。</p>
+    </div>
+
+    <h4>生产实践：订单号的提取策略</h4>
+    <pre><code>import re
+
+def extract_order_no(query: str) -> str | None:
+    """
+    从自然语言中提取订单号。
+
+    常见订单号格式：
+    - SK20240615, ORD20240615-001
+    - 纯数字（如 3701256712）
+    - 带前缀的混合编码
+    """
+    # 策略1：正则匹配已知格式
+    patterns = [
+        r'SK\d{6,}',           # SK 开头 + 6位以上数字
+        r'ORD\d{6,}',          # ORD 开头
+        r'\b\d{10,}\b',        # 10位以上纯数字
+    ]
+    for pat in patterns:
+        match = re.search(pat, query)
+        if match:
+            return match.group()
+
+    # 策略2：用 LLM 提取（处理不规则格式）
+    # 仅在正则匹配不到时调用
+    return None</code></pre>
+
+    <div class="panel info">
+      <h3>💡 关键实践：正则优先，LLM兜底</h3>
+      <p>很多 RAG 教程让人<strong>什么都用 LLM</strong>，但在生产环境中，对于"从句子中提取订单号/SKU"这种有明确结构模式的子任务，<strong>正则表达式比 LLM 更快、更稳定、更便宜</strong>（延迟 &lt; 1ms vs 200-500ms，成本 0 vs 有成本）。</p>
+      <p>推荐策略：<strong>先正则匹配→匹配不到再用 LLM→还不行则走兜底</strong>。这叫"防御性分层调用"。</p>
+    </div>
+
+    <h3>模式二：LLM Function Calling / Tool Use</h3>
+
+    <p>这是目前工业界最主流的做法——不是让 LLM "知道"数据，而是给 LLM <strong>查询数据的能力</strong>。</p>
+
+    <div class="flow">
+      <span class="flow-box">用户查询</span>
+      <span class="flow-arrow">→</span>
+      <span class="arch-box llm">LLM 推理</span>
+      <span class="flow-arrow">→</span>
+      <span class="arch-box mysql">调用 tool:<br>query_order()</span>
+      <span class="flow-arrow">→</span>
+      <span class="arch-box llm">LLM 生成回答</span>
+    </div>
+
+    <pre><code>"""order_tools.py — LLM Function Calling 示例 (OpenAI format)"""
+
+tools = [
+    {
+        "type": "function",
+        "function": {
+            "name": "query_order",
+            "description": "根据订单号查询订单的物流状态和最新信息",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "order_no": {
+                        "type": "string",
+                        "description": "订单号，如 SK20240615",
+                    }
+                },
+                "required": ["order_no"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "search_knowledge_base",
+            "description": "搜索客服知识库中的政策、流程、说明文档",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "搜索关键词",
+                    }
+                },
+                "required": ["query"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_product_by_sku",
+            "description": "根据SKU编码查询产品规格、价格、库存信息",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "sku": {
+                        "type": "string",
+                        "description": "SKU 编码，如 'AP-IP14Pro-256-BK'",
+                    }
+                },
+                "required": ["sku"],
+            },
+        },
+    },
+]
+
+
+def query_order_from_db(order_no: str) -> dict:
+    """真实实现——查 MySQL / 调用订单微服务 API"""
+    # import pymysql
+    # cursor.execute("SELECT * FROM orders WHERE order_no = %s", (order_no,))
+    # return cursor.fetchone()
+
+    # 这里用模拟数据演示
+    return {
+        "order_no": order_no,
+        "status": "已发货",
+        "tracking": "SF1234567890",
+        "estimated_delivery": "2026-06-22",
+        "items": ["iPhone 14 Pro 256GB 黑色 × 1"],
+    }
+
+
+def function_calling_rag(query: str) -> str:
+    """整套流程：LLM 决定调用什么 tool → 执行 → LLM 生成回答"""
+    import openai
+
+    messages = [
+        {"role": "system", "content": "你是一个客服助手。使用工具获取所需数据。"},
+        {"role": "user", "content": query},
+    ]
+
+    # 第一轮：LLM 决定是否调用工具
+    response = openai.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=messages,
+        tools=tools,
+        tool_choice="auto",
+    )
+
+    msg = response.choices[0].message
+
+    # 如果没有工具调用请求，直接返回
+    if not msg.tool_calls:
+        return msg.content
+
+    # 处理每个工具调用
+    for tool_call in msg.tool_calls:
+        fn_name = tool_call.function.name
+        args = json.loads(tool_call.function.arguments)
+
+        if fn_name == "query_order":
+            result = query_order_from_db(args["order_no"])
+        elif fn_name == "get_product_by_sku":
+            result = get_product_from_db(args["sku"])
+        elif fn_name == "search_knowledge_base":
+            result = search_vector_db(args["query"])
+        else:
+            result = {"error": "Unknown tool"}
+
+        # 把工具结果返回给 LLM
+        messages.append(msg)
+        messages.append({
+            "role": "tool",
+            "tool_call_id": tool_call.id,
+            "content": json.dumps(result, ensure_ascii=False),
+        })
+
+    # 第二轮：LLM 根据工具结果生成回答
+    final = openai.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=messages,
+    )
+    return final.choices[0].message.content</code></pre>
+
+    <div class="panel good">
+      <h3>为什么 Function Calling 是当前最佳方案？</h3>
+      <ul>
+        <li><strong>数据不动，能力动</strong>：不需要把订单数据复制到向量库，LLM 通过调用函数直接访问源数据。</li>
+        <li><strong>权限可控</strong>：每个工具可以有独立的访问控制。客服 Agent 能查订单，但不一定能改。</li>
+        <li><strong>审计可追踪</strong>：每一次数据查询都对应一个函数调用记录，便于事后审计。</li>
+        <li><strong>保护用户隐私</strong>：姓名、电话、地址只在函数执行时使用，不会泄露到向量库的持久化存储中。</li>
+      </ul>
+    </div>
+
+    <div class="panel warn">
+      <h3>Function Calling 的陷阱</h3>
+      <ul>
+        <li><strong>LLM 可能用错参数</strong>：提取订单号失败时会调用错误 key 查询。解决方案：在函数入口做参数校验，无效时返回清晰错误信息让 LLM 重试。</li>
+        <li><strong>过多的工具会让 LLM 决策困难</strong>：超过 10-15 个工具时，LLM 可能会选错工具或忘记调用。解决方案：分层路由——先分大类（订单/知识库/产品），每个大类内部再细分。</li>
+        <li><strong>工具需要有幂等设计</strong>：用户说"查我最近的订单"，LLM 可能连续调用两次。查询型工具应该是幂等的，多次调用不产生副作用。</li>
+      </ul>
+    </div>
+
+    <h3>模式三：NL2SQL（自然语言转 SQL）</h3>
+
+    <p>当订单查询的过滤条件复杂且多变时——例如"上个月买 iPhone 14 Pro 并且用了优惠券的订单有哪些"——为每种组合写一个 Function 是不现实的。这时 NL2SQL 模式上场：</p>
+
+    <p><strong>让 LLM 把自然语言转换成 SQL 查询</strong>，直接在 MySQL 上执行。</p>
+
+    <div class="flow">
+      <span class="flow-box">用户查询</span>
+      <span class="flow-arrow">→</span>
+      <span class="arch-box llm">LLM → SQL</span>
+      <span class="flow-arrow">→</span>
+      <span class="arch-box mysql">执行 SQL</span>
+      <span class="flow-arrow">→</span>
+      <span class="arch-box llm">LLM 组织回答</span>
+    </div>
+
+    <pre><code>"""nl2sql.py — 自然语言转 SQL 查询"""
+
+ORDER_DB_SCHEMA = """
+表 orders (订单表):
+  - id          BIGINT PRIMARY KEY  自增主键
+  - order_no    VARCHAR(32) UNIQUE  订单号 (SK20240615)
+  - user_id     BIGINT              用户ID
+  - status      VARCHAR(16)         订单状态: pending/paid/shipped/delivered/cancelled/returned
+  - total       DECIMAL(10,2)       订单总金额
+  - sku_list    JSON                商品列表 [{"sku": "AP-IP14Pro-256-BK", "qty": 1, "price": 8999}]
+  - coupon_id   BIGINT              使用的优惠券ID (可为NULL)
+  - created_at  DATETIME            下单时间
+  - updated_at  DATETIME            最后更新时间
+
+表 skus (商品SKU表):
+  - sku         VARCHAR(32) PRIMARY KEY  商品编码
+  - name        VARCHAR(128)             商品名称
+  - category    VARCHAR(64)              类目
+  - price       DECIMAL(10,2)            当前售价
+  - stock       INT                      库存
+"""
+
+NL2SQL_SYSTEM = f"""你是一个 MySQL 查询助手。将用户的问题转换为 SQL 查询。
+
+数据库 Schema：
+{ORDER_DB_SCHEMA}
+
+规则：
+1. 只输出 SQL，不要任何解释
+2. 只执行 SELECT 查询
+3. 如果请求不确定/不安全，输出 "UNSAFE"
+4. 如果没有匹配的数据结构可以回答，输出 "UNSUPPORTED"
+5. 使用 %s 占位符做参数化查询（防止 SQL 注入）
+"""
+
+def nl2sql(user_query: str) -> str:
+    """自然语言 → SQL"""
+    import openai
+
+    response = openai.chat.completions.create(
+        model="gpt-4o-mini",
+        temperature=0.0,
+        messages=[
+            {"role": "system", "content": NL2SQL_SYSTEM},
+            {"role": "user", "content": user_query},
+        ],
+    )
+    sql = response.choices[0].message.content.strip()
+
+    # 安全检查
+    sql_upper = sql.upper()
+    if sql in ("UNSAFE", "UNSUPPORTED"):
+        return sql
+    if not sql_upper.startswith("SELECT"):
+        return "UNSAFE"
+
+    return sql
+
+
+def execute_nl_query(user_query: str) -> str:
+    """完整流程：NL → SQL → 执行 → LLM 组织回答"""
+    sql = nl2sql(user_query)
+
+    if sql == "UNSAFE":
+        return "抱歉，我无法执行此查询。请提供更具体的信息。"
+    if sql == "UNSUPPORTED":
+        # 兜底：尝试用工具函数做模糊匹配
+        return handle_fallback(user_query)
+
+    # 执行 SQL（使用参数化查询）
+    # import pymysql
+    # conn = pymysql.connect(...)
+    # with conn.cursor() as cur:
+    #     cur.execute(sql)
+    #     rows = cur.fetchall()
+    #     columns = [desc[0] for desc in cur.description]
+
+    # 模拟结果
+    rows = [{"order_no": "SK20240615", "status": "shipped", "total": 8999.00}]
+
+    # 让 LLM 把结果转化成友好的回答
+    import openai
+    response = openai.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[
+            {"role": "system", "content": "根据查询结果用中文回答用户的问题，简洁友好。"},
+            {"role": "user", "content": f"用户问题：{user_query}\n查询结果：{json.dumps(rows, ensure_ascii=False, default=str)}"},
+        ],
+    )
+    return response.choices[0].message.content</code></pre>
+
+    <div class="panel danger">
+      <h3>⚠️ NL2SQL 的安全红线</h3>
+      <ul>
+        <li><strong>永远限制为 SELECT 只读</strong>：在数据库连接层面，使用一个只读权限的数据库用户连接到只读副本，而不是主库。</li>
+        <li><strong>SQL 注入防御</strong>：始终使用参数化查询（%s 占位符），不要让 LLM 直接拼接值到 SQL 字符串中。</li>
+        <li><strong>结果行数上限</strong>：在生成的 SQL 末尾追加 <code>LIMIT 100</code>，防止"查所有订单"导致数据库 OOM。</li>
+        <li><strong>执行时间限制</strong>：设置查询超时（如 5 秒），超时后终止并告诉用户查询太复杂，建议简化。</li>
+        <li><strong>敏感列脱敏</strong>：如果没有必要，Schema 描述中不要包含电话、地址等 PII 列，或者告诉模型"返回结果时脱敏"。</li>
+      </ul>
+    </div>
+
+    <h3>模式四：联邦检索 (Federated Retrieval)</h3>
+
+    <p>当数据源超过 3-4 个时（知识库 + 订单库 + 商品库 + 库存系统 + 物流系统），一个查询可能同时需要多个数据源的信息。例如："我的 SK20240615 订单里的 iPhone 充电头是多少瓦的？"——这既需要订单信息（买了什么），又需要产品规格信息（充电头参数）。</p>
+
+    <div class="flow" style="flex-wrap:wrap;">
+      <span class="flow-box">用户查询</span>
+      <span class="flow-arrow">→</span>
+      <span class="flow-box highlight">查询分解器</span>
+      <span class="flow-arrow">→</span>
+      <span class="arch-box vector">知识库检索</span><br>
+      <span style="width:100%;height:4px"></span>
+      <span style="width:120px"></span>
+      <span class="flow-arrow">→</span>
+      <span class="arch-box mysql">订单查询</span><br>
+      <span style="width:100%;height:4px"></span>
+      <span style="width:120px"></span>
+      <span class="flow-arrow">→</span>
+      <span class="arch-box es">产品搜索 (ES)</span>
+      <span class="flow-arrow" style="margin-left:10px;">→</span>
+      <span class="flow-box">结果融合</span>
+      <span class="flow-arrow">→</span>
+      <span class="arch-box llm">LLM 综合回答</span>
+    </div>
+
+    <pre><code>"""federated_retriever.py — 联邦检索"""
+
+class FederatedRetriever:
+    """
+    多源联邦检索：将一个查询分解成多个子查询，分别到不同数据源检索，
+    最后汇总融合。
+    """
+
+    def __init__(self):
+        self.sources = {
+            "kb": KnowledgeBaseRetriever(),   # 向量检索
+            "order": OrderServiceClient(),     # 订单服务 gRPC/HTTP
+            "product": ProductSearchClient(),  # Elasticsearch
+            "logistics": LogisticsAPIClient(), # 物流 API
+        }
+
+    def decompose_query(self, query: str) -> list[dict]:
+        """
+        将查询分解为多个子查询，每个指定数据源。
+
+        返回: [
+            {"source": "order", "params": {"order_no": "SK20240615"}},
+            {"source": "product", "params": {"query": "iPhone 14 Pro 充电头 功率"}},
+        ]
+        """
+        # 使用 LLM 分解
+        prompt = f"""将以下客服查询分解为子任务，每个子任务指定数据源：
+
+        可用数据源：
+        - kb: 客服知识库（政策、流程、说明）
+        - order: 订单系统（订单号、物流状态）
+        - product: 产品库（SKU、规格参数、价格）
+        - logistics: 物流系统（运单追踪）
+
+        查询：{query}
+
+        以 JSON 数组格式输出，不要解释：
+        [{{"source": "...", "params": {{...}}}}, ...]
+        """
+        # ... 调用 LLM 解析
+        return [
+            {"source": "order", "params": {"order_no": "SK20240615"}},
+            {"source": "product", "params": {"query": "iPhone 14 Pro 充电头"}},
+        ]
+
+    def retrieve(self, query: str) -> dict:
+        """联邦检索：分解 → 并行查询各数据源 → 聚合 """
+        sub_tasks = self.decompose_query(query)
+
+        # 并行查询所有数据源
+        from concurrent.futures import ThreadPoolExecutor
+        results = {}
+
+        with ThreadPoolExecutor(max_workers=4) as pool:
+            futures = {}
+            for task in sub_tasks:
+                source = task["source"]
+                params = task["params"]
+                handler = self.sources.get(source)
+                if handler:
+                    future = pool.submit(handler.query, **params)
+                    futures[future] = source
+
+            for future in futures:
+                source = futures[future]
+                results[source] = future.result()
+
+        return results</code></pre>
+
+    <p>联邦检索是企业级 RAG 的终局形态。它不是"把所有数据倒入一个引擎"，而是"让无数个引擎以统一接口对外服务"。知名开源实现包括 <a href="https://github.com/run-llama/llama_index">LlamaIndex</a> 的 <code>RouterQueryEngine</code> 和 <a href="https://github.com/langchain-ai/langchain">LangChain</a> 的 <code>MultiSourceRetriever</code>。</p>
+  </section>
+
+  <section>
+    <h2>四大模式对比与选型决策</h2>
+
+    <table>
+      <tr><th>模式</th><th>适用场景</th><th>数据源少且稳定（≤3）</th><th>数据源多（≥4）</th><th>需要实时数据</th><th>开发成本</th><th>维护成本</th></tr>
+      <tr><td><strong>查询路由</strong></td><td>意图明显、严格按类别区分</td><td>✅</td><td>⚠️ 需分层</td><td>✅</td><td>低</td><td>低</td></tr>
+      <tr><td><strong>Function Calling</strong></td><td>动态决定调用哪个数据源</td><td>✅</td><td>⚠️ 工具选型准确率下降</td><td>✅</td><td>中</td><td>中</td></tr>
+      <tr><td><strong>NL2SQL</strong></td><td>同一数据源、灵活过滤条件</td><td>✅</td><td>❌ 跨表复杂时不可靠</td><td>✅</td><td>高</td><td>中</td></tr>
+      <tr><td><strong>联邦检索</strong></td><td>需要同时查询多个异构数据源</td><td>⚠️ 有点过设计</td><td>✅</td><td>✅</td><td>高</td><td>高</td></tr>
+    </table>
+
+    <div class="panel good">
+      <h3>从你的客服场景出发：推荐演进路径</h3>
+      <ol>
+        <li><strong>第一步</strong>：查询路由（模式一）+ 知识库向量检索（已有）。这是你现在就可以做的 —— 两三天的改动量。</li>
+        <li><strong>第二步</strong>：将订单查询和产品查询升级为 Function Calling（模式二）。不需要重构现有路由。</li>
+        <li><strong>第三步</strong>：当数据源超过 4 个且查询需要同时跨多个源时，考虑引入联邦检索（模式四）。</li>
+      </ol>
+      <p>NL2SQL（模式三）在你需要灵活过滤（时间范围、条件组合）时引入，不要作为默认方案——它对数据库安全性有额外要求。</p>
+    </div>
+  </section>
+
+  <section>
+    <h2>完整架构鸟瞰：企业级 RAG 客服系统</h2>
+
+    <p>现在把一切拼起来，一个生产级的客服 RAG 系统长什么样：</p>
+
+    <div class="arch">
+      <div class="arch-row">
+        <span class="flow-box">用户消息</span>
+        <span class="flow-arrow">→</span>
+        <span class="arch-box llm">意图分类<br><small>LLM / 规则</small></span>
+      </div>
+      <div class="arch-row" style="margin-left:60px">
+        <span>├─ <strong>知识库类</strong></span>
+        <span class="flow-arrow">→</span>
+        <span class="arch-box vector">向量检索<br><small>Chroma/Pinecone</small></span>
+        <span class="flow-arrow">→</span>
+        <span class="arch-box es">BM25 (ES)<br><small>备胎召回</small></span>
+        <span class="flow-arrow">→</span>
+        <span class="flow-box">RRF 融合</span>
+        <span class="flow-arrow">→</span>
+        <span class="flow-box">LLM 回答<br><small>引用知识库文档</small></span>
+      </div>
+      <div class="arch-row" style="margin-left:60px">
+        <span>├─ <strong>订单类</strong></span>
+        <span class="flow-arrow">→</span>
+        <span class="arch-box mysql">Function: query_order()</span>
+        <span class="flow-arrow">→</span>
+        <span class="flow-box">LLM 组织回答<br><small>调用结果 + 引用</small></span>
+      </div>
+      <div class="arch-row" style="margin-left:60px">
+        <span>├─ <strong>产品类</strong></span>
+        <span class="flow-arrow">→</span>
+        <span class="arch-box es">Elasticsearch 搜索</span>
+        <span class="flow-arrow">→</span>
+        <span class="flow-box">LLM 组织回答</span>
+      </div>
+      <div class="arch-row" style="margin-left:60px">
+        <span>└─ <strong>混合查询</strong></span>
+        <span class="flow-arrow">→</span>
+        <span class="arch-box api">查询分解器</span>
+        <span class="flow-arrow">→</span>
+        <span class="flow-box">多源并行取数</span>
+        <span class="flow-arrow">→</span>
+        <span class="flow-box">LLM 综合回答</span>
+      </div>
+    </div>
+
+    <p>关键观察：</p>
+    <ul>
+      <li><strong>向量库（Chroma / Pinecone / Weaviate）只存知识型数据</strong>——政策文档、产品手册、FAQ。数据量通常从几千到几百万条不等。</li>
+      <li><strong>事务型数据（订单、库存、物流）存在源数据库</strong>——MySQL, PostgreSQL, 或者 Elasticsearch（用于全文搜索）。</li>
+      <li><strong>Elasticsearch 是"中间地带"</strong>——对于需要模糊搜索的产品库（"iPhone 充电头"搜出所有兼容充电头），Elasticsearch 的全文搜索能力优于向量检索，也优于精确的 SQL 查询。</li>
+    </ul>
+
+    <p>详细参考：<a href="../reference/0006-生产级多源检索架构-cheatsheet.html">生产级多源检索架构速查表</a>。</p>
+  </section>
+
+  <section>
+    <h2>你还想问的问题</h2>
+
+    <h3>"那 BM25 在真实生产中还用在什么场景？"</h3>
+    <p>课程 0005 的 BM25 没有错——它只是应该用在<strong>知识库中那些包含编码/型号的文本</strong>上，而不是用来替代订单数据库。比如：</p>
+    <ul>
+      <li>"AP-IP14Pro-256-BK 这个 SKU 的维修指南是什么？"——SKU 型号出现在文档文本中，BM25 完美匹配</li>
+      <li>"iPhone 14 Pro 的 A16 芯片有什么改进？"——"A16"是产品参数，出现在技术文档中</li>
+      <li>"退货单 RMA20240088 的处理流程"——退货单号存在于售后流程文档的示例中</li>
+    </ul>
+    <p>知识库文档中<strong>本身就会提到的编码和型号</strong>才是 BM25 的用武之地。不存在于知识库中的海量事务数据（实际订单、实际库存）不走 BM25。</p>
+
+    <h3>"为什么课程 0005 用了误导性的例子？"</h3>
+    <p>这是一个合理的批评。课程 0005 的例子的确打破了<strong>"数据应该在哪"</strong>的假设。但它的真正意图是展示 BM25 的精确匹配机制——只是选了一个不太恰当的场景。本课就是对那个架构缺口的补全。</p>
+
+    <h3>"实际客服系统里有向量库吗？"</h3>
+    <p>有，但只是整个系统的一部分。根据某电商客服团队的公开分享，他们的生产系统中：</p>
+    <ul>
+      <li>向量库（~50万条文档 chunk）只覆盖了知识型查询的约 30%</li>
+      <li>订单/物流查询（约 50%）直接路由到业务 API</li>
+      <li>产品搜索（约 15%）通过 Elasticsearch</li>
+      <li>其余 5% 走兜底/人工</li>
+    </ul>
+    <p>向量检索是 RAG 系统中最<strong>亮眼</strong>的组件，但不一定是调用量<strong>最大</strong>的组件。</p>
+  </section>
+
+  <section>
+    <h2>练习：设计你自己的多源检索架构</h2>
+
+    <div class="panel task">
+      <h3>实战练习</h3>
+      <p>假设你正在为一家中等规模的电商公司设计客服 RAG 系统。已有以下数据：</p>
+      <ul>
+        <li>知识库：2000 篇 Markdown 文档（售后政策、操作指南、常见问题）</li>
+        <li>订单表：5000 万条订单记录，在 MySQL 中</li>
+        <li>商品表：10 万条 SKU，含详细规格参数，在 MySQL 中</li>
+        <li>物流轨迹：亿级，在专门的物流系统（API 接口）中</li>
+        <li>用户评价：200 万条，在 MongoDB 中</li>
+      </ul>
+      <p><strong>任务</strong>：为以下每种用户查询，写出处理路径——它应该经过什么组件、查询什么数据源、怎么组织回答。用文字描述即可：</p>
+      <ol>
+        <li>"iPhone 14 Pro 的保修政策是什么？"</li>
+        <li>"帮我查一下订单 SK20240615 到哪了"</li>
+        <li>"AP-IP14Pro-256-BK 还有库存吗？"</li>
+        <li>"我买的 iPhone 充电头是多少瓦的？"（提示：先查订单里的SKU，再查产品规格）</li>
+      </ol>
+      <p>写完后发给我，我帮你分析架构设计中的问题。</p>
+    </div>
+
+    <div class="panel">
+      <h3>选择题：巩固理解</h3>
+      <p>以下哪种做法在生产环境中是正确的？</p>
+      <ol type="A">
+        <li>把所有订单数据（包括用户姓名、电话）都 embedding 后存入向量库，这样可以搜索订单内容</li>
+        <li>使用 LLM Function Calling，让 LLM 按需调用 query_order(order_no) 查询订单 API，订单数据不进入向量库</li>
+        <li>把 1 亿条订单全部导入 BM25 索引，用关键词搜索代替数据库查询</li>
+        <li>告诉用户"请自己到官网查订单"，避免麻烦的架构设计</li>
+      </ol>
+      <p><strong>答案：B</strong>。订单数据是事务型隐私数据，不应持久化进入向量库。Function Calling 让 LLM 按需调用 API 去源数据库查询，是最安全且优雅的解决方案。</p>
+    </div>
+  </section>
+
+  <section>
+    <h2>你现在应该记住的五句话</h2>
+    <ol>
+      <li><strong>数据分两类：知识型放向量库，事务型留源数据库。</strong>前者查询语义相似度，后者查询精确状态——它们是不同的技术栈。</li>
+      <li><strong>查询路由是 RAG 系统的第一道门。</strong>先判断用户意图，再路由到对应的数据源——90% 的场景下这是最高效的做法。</li>
+      <li><strong>LLM Function Calling 是目前连接 LLM 和事务数据的工业级标准。</strong>给 LLM 调用数据库的"能力"，而不是把数据复制一份给它。</li>
+      <li><strong>安全性第一：NL2SQL 必须用只读用户 + 参数化查询 + 结果行限 + 超时。</strong>让 LLM 生成 SQL 去操作生产数据库是一个需要严肃对待的安全决策。</li>
+      <li><strong>从小做起，按需演进。</strong>从简单的查询路由开始，最多两周就能落地。随着数据源增多，逐步引入 Function Calling、联邦检索。</li>
+    </ol>
+  </section>
+
+  <section>
+    <h2>推荐阅读</h2>
+    <ul>
+      <li><a href="https://blog.langchain.dev/agentic-rag-langgraph/">LangGraph: Agentic RAG</a> — LangChain 的 Agentic RAG 实现，展示了用 Agent 做多源查询的完整模式</li>
+      <li><a href="https://docs.llamaindex.ai/en/stable/examples/query_engine/router_query_engine/">LlamaIndex: Router Query Engine</a> — LlamaIndex 的路由查询引擎文档，联邦检索的开源实现</li>
+      <li><a href="https://arxiv.org/abs/2204.00498">"DIN-SQL: Decomposed In-Context Learning of Text-to-SQL with Self-Correction"</a> — NL2SQL 的前沿论文，展示了将复杂查询分解为子查询的 SOTA 方法</li>
+      <li><a href="https://citeseerx.ist.psu.edu/document?repid=rep1&type=pdf&doi=ef519f19a910baf10b3e9e8c4f54cb34dc8eaf71">Query Routing: A Practical Guide</a> — 经典查询路由论文</li>
+    </ul>
+    <p>复习课程 0005：<a href="0005-混合检索与查询转换.html">混合检索与查询转换</a>。前往课程 0007：<a href="0007-答案质量评估与RAGAS.html">答案质量评估与 RAGAS</a>。</p>
+    <p class="small">有任何不清楚的地方——四种模式的细节、你的生产环境应该选哪种、或者 NL2SQL 的安全配置——直接问我。也可以把你的练习答案发给我，我帮你做架构评审。</p>
+  </section>
+
+  <section>
+    <h2>接下来学什么</h2>
+    <p>现在你掌握了：</p>
+    <ul>
+      <li>✅ <strong>混合检索 + 查询转换</strong>（第 5 课）——向量 + BM25 + RRF + 查询优化</li>
+      <li>✅ <strong>答案质量评估</strong>（第 7 课）——Faithfulness、Relevancy、RAGAS</li>
+      <li>✅ <strong>多源检索架构</strong>（第 7 课）——查询路由、Function Calling、NL2SQL、联邦检索</li>
+    </ul>
+    <p>下一步，你应该评估你的 RAG 系统<strong>到底回答得怎么样</strong>。现在你有了多源检索能力，但好的检索是否必然带来好的答案？</p>
+    <p><strong>下一课《答案质量评估与 RAGAS》</strong>将教你把 RAG 系统从"检得准"提升到"答得好"：</p>
+    <ul>
+      <li><strong>Faithfulness（忠实度）</strong>——LLM 有没有忠实于检索到的上下文？</li>
+      <li><strong>Answer Relevancy（答案相关度）</strong>——答案是否回答了用户的问题？</li>
+      <li><strong>Context Precision / Recall</strong>——检索上下文的精确度和覆盖面</li>
+      <li><strong>端到端评估流水线</strong>——从 golden 数据到评估报告的全自动流程</li>
+    </ul>
+    <p>前往课程 0007：<a href="0007-答案质量评估与RAGAS.html">答案质量评估与 RAGAS</a>。</p>
+  </section>
+</main>
+</body>
+</html>

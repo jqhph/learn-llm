@@ -664,7 +664,7 @@ if __name__ == "__main__":
         if (quizId === "quiz1") {
           feedback.textContent = "✓ 正确。Recall@3=0.75 意味着 25% 的查询答案不在前 3；MRR=0.60 ≈ 平均第一个正确结果排在第 1.67 位，说明即使在前 3 里也不是总能排第一。两个指标互补，Recall 看覆盖，MRR 看排名。";
         } else {
-          feedback.textContent = "✓ 正确。Cross-encoder 的精髓是能捕捉 token 级别的交互信息，区分"拆封了不能退"和"拆封了但有质量问题可以退"这种细微差异——这是 bi-encoder 做不到的。";
+          feedback.textContent = "✓ 正确。Cross-encoder 的精髓是能捕捉 token 级别的交互信息，区分“拆封了不能退”和“拆封了但有质量问题可以退”这种细微差异——这是 bi-encoder 做不到的。";
         }
         feedback.style.color = "var(--good)";
       } else {
