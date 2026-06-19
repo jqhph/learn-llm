@@ -1,5 +1,21 @@
 # LLM RAG Enterprise Knowledge Base Resources
 
+## Knowledge (continued — structured output & data validation)
+
+- [Pydantic Official Documentation](https://docs.pydantic.dev/latest/)
+  Official docs for Python's most popular data validation library (50M+ monthly downloads). Use for: defining data models with type validation, serialization, and schema generation for LLM structured outputs.
+- [Instructor: Structured LLM Outputs](https://python.useinstructor.com/)
+  Library that extends Pydantic for LLM structured extraction via function calling. Use for: reliably extracting typed JSON from LLM responses, with support for OpenAI/Anthropic/Cohere/Google.
+- [Pydantic: Why we rewrote the validation logic (v2)](https://docs.pydantic.dev/latest/blog/pydantic-v2/)
+  Technical deep-dive into Pydantic v2's Rust core (pydantic-core). Use for: understanding performance characteristics — Pydantic v2 is 5-50x faster than v1 for validation.
+- [FastAPI + Pydantic: Request Validation](https://fastapi.tiangolo.com/tutorial/body/#use-the-model)
+  Official FastAPI tutorial on using Pydantic models for request/response validation. Use for: seeing how Pydantic integrates with FastAPI for production RAG API services (L13).
+- [Anthropic Docs: Tool Use with Pydantic](https://docs.anthropic.com/en/docs/build-with-claude/tool-use)
+  Official guide on defining tools with JSON Schema (which Pydantic generates natively). Use for: understanding how Pydantic models map to LLM tool definitions.
+- [OpenAI Docs: Structured Outputs](https://platform.openai.com/docs/guides/structured-outputs)
+  Official guide for OpenAI's structured output mode using JSON Schema. Use for: comparing Pydantic-generated schemas vs native OpenAI structured output.
+
+
 ## Knowledge
 
 - [Paper: "Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks" - Lewis et al.](https://arxiv.org/abs/2005.11401)
@@ -65,6 +81,36 @@
 - [Anthropic: Building effective evaluations](https://docs.anthropic.com/en/docs/build-with-claude/evaluations)
   Anthropic's official guide on building evaluations for LLM applications. Use for: understanding eval design principles, sampling strategies, and when to use LLM-as-a-Judge vs human evaluation vs automated metrics.
 
+## Knowledge (continued - RAG tech stack & ecosystem)
+
+- [LangChain Python Documentation](https://python.langchain.com/docs/introduction/)
+  Official LangChain docs. Use for: understanding LangChain's component model, chains, agents, and retrieval strategies — reference for comparing framework vs native SDK approaches.
+- [LlamaIndex Documentation](https://docs.llamaindex.ai/en/stable/)
+  Official LlamaIndex docs. Use for: RAG-specific framework features, data connectors (160+ sources), index types, and query engines.
+- [Qdrant Documentation](https://qdrant.tech/documentation/)
+  Official Qdrant docs. Use for: vector database setup, payload filtering, hybrid search, and production deployment.
+- [Milvus Documentation](https://milvus.io/docs)
+  Official Milvus docs. Use for: distributed vector database architecture, index types (IVF/HNSW), GPU indexing, and multi-tenant setup.
+- [Qdrant: Python quickstart](https://qdrant.tech/documentation/quickstart/)
+  Qdrant Python client quickstart. Use for: first Qdrant integration — CRUD operations, collection management, and filtering.
+- [Elasticsearch: Vector search](https://www.elastic.co/guide/en/elasticsearch/reference/current/dense-vector.html)
+  Official ES dense vector documentation. Use for: using ES 8.x as a vector database alongside BM25 text search — a common hybrid approach.
+- [PGVector: GitHub](https://github.com/pgvector/pgvector)
+  Open-source PostgreSQL vector extension. Use for: adding vector search to existing PostgreSQL databases — ACID transactions + vector search in one system.
+- [MTEB Leaderboard (HuggingFace)](https://huggingface.co/spaces/mteb/leaderboard)
+  Massive Text Embedding Benchmark ranking. Use for: comparing embedding model performance across retrieval, clustering, classification, and more — especially useful for Retrieval Average sub-score.
+- [C-MTEB Leaderboard](https://huggingface.co/spaces/mteb/leaderboard) (Chinese subset section)
+  Chinese-specific MTEB results. Use for: comparing Chinese embedding model performance (BGE-zh/m3e/stella/GTE/text2vec) on Chinese-language tasks.
+- [Ollama](https://ollama.com/)
+  Local model deployment tool. Use for: running embedding and generation models locally with zero cloud dependencies — `ollama pull bge-m3` for embedding, `ollama pull qwen2.5` for generation.
+- [RAG Landscape Overview — Chris Mahoney (2024)](https://www.chrismahoney.dev/p/rag-landscape-overview)
+  A visual guide to the RAG ecosystem covering popular frameworks, vector databases, and model choices with practical commentary. Use for: getting an alternative third-party perspective on the same comparisons in this lesson.
+- [Pinecone Docs](https://docs.pinecone.io/)
+  Official Pinecone docs. Use for: fully managed vector database — serverless indices, pod-based indexes, namespaces for multi-tenancy.
+- [Haystack Documentation](https://docs.haystack.deepset.ai/)
+  Official Haystack documentation. Use for: alternative NLP framework with clean Pipeline abstraction — especially useful for teams using OpenSearch/Elasticsearch.
+
 ## Gaps
 
 - Need to add production architecture references for enterprise permissions, tenant isolation, monitoring, and cost controls after the demo stage.
+- Need to add comparison references for LangChain vs LlamaIndex vs native SDK with real code examples under production load.

@@ -1,0 +1,1096 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>第 8 课：RAG 技术栈全景图 —— 从"一个 Demo"到"一套方案"</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink:#172033; --muted:#667085; --line:#d7dde8; --accent:#0f766e;
+      --accent2:#8b5e00; --good:#116329; --bad:#a10e25; --bg:#fbfcfe; --panel:#fff;
+    }
+    * { box-sizing: border-box; }
+    body { margin:0; font-family: ui-serif, Georgia, "Noto Serif SC", serif; color:var(--ink); background:var(--bg); line-height:1.7; }
+    main { max-width: 960px; margin: 0 auto; padding: 42px 22px 70px; }
+    header { margin-bottom: 30px; }
+    .kicker { font: 700 13px/1.2 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color:var(--accent); text-transform: uppercase; letter-spacing: .08em; }
+    h1 { font-size: clamp(32px, 5vw, 54px); line-height:1.08; margin: 10px 0 12px; letter-spacing:0; }
+    h2 { font-size: 23px; margin: 34px 0 12px; padding-bottom: 6px; border-bottom:1px solid var(--line); }
+    h3 { font-size: 18px; margin: 20px 0 8px; }
+    h4 { font-size: 16px; margin: 14px 0 6px; }
+    p { margin: 0 0 14px; }
+    a { color:#0b5cad; text-decoration-thickness:1px; text-underline-offset:3px; }
+    .lede { color:var(--muted); max-width:760px; font-size:18px; }
+    .panel { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:18px; margin:16px 0; }
+    .panel.good { border-left:4px solid var(--good); }
+    .panel.warn { border-left:4px solid var(--accent2); }
+    .panel.info { border-left:4px solid var(--accent); }
+    code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    code { background:#eef6f5; padding:2px 5px; border-radius:4px; font-size:0.92em; }
+    pre { overflow:auto; background:#f6f8fa; color:var(--ink); border:1px solid var(--line); border-radius:8px; padding:16px; font-size:14px; line-height:1.55; }
+    .small { color:var(--muted); font-size:14px; }
+    .tag { display:inline-block; background:var(--accent); color:#fff; border-radius:4px; padding:2px 8px; font-size:12px; font-weight:700; letter-spacing:.03em; font-family:ui-sans-serif,system-ui; }
+    .tag.python { background:#3776AB; }
+    .tag.js { background:#F7DF1E; color:#000; }
+    .tag.go { background:#00ADD8; }
+    .tag.java { background:#ED8B00; }
+    .tag.prod { background:#a10e25; }
+    .tag.dev { background:#0d9488; }
+    .quiz { display:grid; gap:10px; margin-top:12px; }
+    button { border:1px solid var(--line); background:#fff; border-radius:8px; padding:11px 13px; text-align:left; font:600 15px/1.35 ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif; color:var(--ink); cursor:pointer; }
+    button:hover { border-color:var(--accent); }
+    button.selected { border-color:var(--accent); background:#eef6f5; }
+    button.correct { border-color:var(--good); background:#edf8ef; color:var(--good); }
+    button.wrong { border-color:var(--bad); background:#fff0f2; color:var(--bad); }
+    .feedback { min-height:26px; font-weight:700; margin-top:8px; }
+    .task { border-left:4px solid var(--accent2); padding-left:14px; }
+    table { border-collapse:collapse; width:100%; margin:14px 0; }
+    th, td { border:1px solid var(--line); padding:8px 12px; text-align:left; font-size:15px; }
+    th { background:#f6f8fa; font-weight:700; }
+    ul, ol { padding-left:22px; }
+    .combo { display:grid; grid-template-columns: 1fr 1fr; gap:14px; margin:16px 0; }
+    .flow { display:flex; align-items:center; gap:8px; flex-wrap:wrap; justify-content:center; margin:16px 0; }
+    .flow-box { border:1px solid var(--line); border-radius:6px; padding:8px 14px; background:var(--panel); font-size:14px; text-align:center; }
+    .flow-arrow { font-size:20px; color:var(--muted); }
+    .matrix { display:grid; grid-template-columns: 1fr 1fr; gap:12px; margin:14px 0; }
+    .matrix-cell { border:1px solid var(--line); border-radius:8px; padding:14px; }
+    .matrix-cell h4 { margin:0 0 6px; font-size:15px; }
+    .star { color:#f5b342; }
+    .dim-table td:first-child { font-weight:700; white-space:nowrap; }
+    @media (max-width: 640px) { .combo { grid-template-columns: 1fr; } .matrix { grid-template-columns: 1fr; } .dim-table td:first-child { white-space:normal; } }
+    @media print { body { background:white; } main { max-width:none; padding:20mm; } .panel { break-inside: avoid; } button { border-color:#aaa; } }
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <div class="kicker">Lesson 0008 · 模块二开篇</div>
+    <h1>RAG 技术栈全景图：从"一个 Demo"到"一套方案"</h1>
+    <p class="lede">本课目标：你已用 Chroma + OpenAI 跑通了 RAG 核心链路。但在深入优化之前，你需要一张完整的"技术选型地图"——看清编程语言、框架、向量库、模型的全景，才能为你的真实场景做出理性的技术栈选择。</p>
+  </header>
+
+  <section>
+    <h2>你今天要获得的能力</h2>
+    <p>学完本课，你将拥有：</p>
+    <ul>
+      <li>一张完整的 <strong>RAG 技术选型全景地图</strong>——以 RAG 核心链路为横轴、可选方案为纵轴</li>
+      <li>对 <strong>六类技术组件</strong>的系统认知：编程语言 / LLM 框架 / 向量数据库 / Embedding 模型 / 生成模型 / 搜索引擎</li>
+      <li>对 <strong>Pydantic + Instructor</strong> 的清晰理解——Python RAG 生态中无处不在的"隐形基础层"，以及如何用它实现 LLM 结构化输出</li>
+      <li>一套 <strong>决策框架</strong>——根据业务场景（客服 Q&A / 企业 Wiki / 合同审查 / 医疗合规）快速匹配最优技术栈</li>
+      <li>一次 <strong>实际迁移体验</strong>：将 Chroma 替换为 Qdrant，感受向量库迁移的真实工作量</li>
+    </ul>
+    <p>这是模块二的地基课——不做任何技术选型，而是先看清楚"有哪些选择"以及"每种选择背后的 trade-off"。</p>
+    <p class="small">前置回顾：<a href="0007-答案质量评估与RAGAS.html">第 7 课：答案质量评估与 RAGAS</a>。速查表：<a href="../reference/0008-rag-tech-stack-overview-cheatsheet.html">RAG 技术栈全景速查表</a>。</p>
+  </section>
+
+  <!-- ===================== 第一部分：全景地图 ===================== -->
+  <section>
+    <h2>第一部分：RAG 技术栈全景地图</h2>
+
+    <p>让我们从"高空俯瞰"开始。以 RAG 核心链路（Chunk → Embed → Store → Retrieve → Rerank → Generate → Evaluate）为横轴，以可选技术方案为纵轴，下面是这一张完整的全景地图：</p>
+
+    <div class="flow">
+      <div class="flow-box">📄 文档<br><small>PDF/HTML/MD</small></div>
+      <span class="flow-arrow">→</span>
+      <div class="flow-box">🔪 分块<br><small>语义/固定/递归</small></div>
+      <span class="flow-arrow">→</span>
+      <div class="flow-box">🧮 Embedding<br><small>OpenAI/BGE/…</small></div>
+      <span class="flow-arrow">→</span>
+      <div class="flow-box">💾 向量库<br><small>Chroma/Milvus/…</small></div>
+    </div>
+    <div class="flow">
+      <div class="flow-box">🔍 检索<br><small>向量/BM25/Hybrid</small></div>
+      <span class="flow-arrow">→</span>
+      <div class="flow-box">📊 重排序<br><small>Cross-Encoder</small></div>
+      <span class="flow-arrow">→</span>
+      <div class="flow-box">🤖 生成<br><small>GPT/通义/DeepSeek</small></div>
+      <span class="flow-arrow">→</span>
+      <div class="flow-box">📋 评估<br><small>RAGAS/LangSmith</small></div>
+    </div>
+
+    <p>每个环节都有多个可选方案。本课不是要你记住每个环节的所有选项——而是要 <strong>建立一张"心智地图"</strong>，将来在任何环节遇到问题时，知道"原来这里还有别的选择"。</p>
+
+    <div class="panel info">
+      <h3>⚠️ 本课的使用方式</h3>
+      <p>这一课信息量很大。建议你不要一口气读完——而是：</p>
+      <ol>
+        <li><strong>先浏览全景</strong>（第一至第六部分，每部分花 5 分钟看对比表格）</li>
+        <li><strong>重点读你此刻最关心的部分</strong>（比如你正纠结"该用 LangChain 还是原生 SDK"，那就精读第三部分）</li>
+        <li><strong>以后遇到选型问题时回来查阅</strong>——本课就是你的 RAG 技术栈参考书</li>
+      </ol>
+    </div>
+  </section>
+
+  <!-- ===================== 第二部分：编程语言 ===================== -->
+  <section>
+    <h2>第二部分：编程语言选择</h2>
+
+    <p>作为技术栈的第一层，语言选择决定了你能获得的生态支持、团队招聘半径和长期维护成本。</p>
+
+    <table>
+      <tr><th>语言</th><th>RAG 生态成熟度</th><th>优势</th><th>劣势</th><th>适用场景</th></tr>
+      <tr>
+        <td><span class="tag python">Python</span></td>
+        <td><span class="star">★★★★★</span></td>
+        <td>生态最全——LangChain/LlamaIndex/HuggingFace 全部优先支持 Python；所有模型官方 SDK 首发行语言；社区最大、教程最多、遇到问题 Stack Overflow 一搜一大把；<strong>Pydantic</strong>（数据验证/结构化输出）和 <strong>FastAPI</strong>（API 服务）等关键库都来自 Python 生态</td>
+        <td>GIL 性能瓶颈；部署镜像大（通常 1-2GB）；静态类型需依赖 mypy/Pyright（不如 Go/Java 天然类型安全）</td>
+        <td><strong>90% 的 RAG 场景首选。</strong>特别是<em>涉及模型调用、数据处理、快速迭代</em>的场景</td>
+      </tr>
+      <tr>
+        <td><span class="tag js">JavaScript / TS</span></td>
+        <td><span class="star">★★★★</span></td>
+        <td>前端全栈（同一个语言写前端+后端+AI）；Edge Runtime 友好（Cloudflare Workers / Vercel Edge）；LangChain.js / LlamaIndex.TS 可用；Vercel AI SDK 增长迅猛</td>
+        <td>数据处理库远不如 Python 丰富；部分模型无官方 JS SDK（需手写 REST 调用）；科学计算生态弱</td>
+        <td>前端集成 RAG（如网页聊天助手）、Edge 部署、全栈团队不想引入第二门语言</td>
+      </tr>
+      <tr>
+        <td><span class="tag go">Go</span></td>
+        <td><span class="star">★★★</span></td>
+        <td>高性能（比 Python 快 10-40 倍）；低内存占用（单二进制）；部署简单（无需 Python 运行时）；goroutine 处理并发优雅</td>
+        <td>RAG 框架几乎空白——无成熟的 LangChain / LlamaIndex Go 版；需手写大量胶水代码（embedding 调用、向量检索、prompt 管理）</td>
+        <td>高性能检索服务、API 网关层、中间件——适合用 Go 做"检索微服务"，Python 仍做"AI 逻辑"</td>
+      </tr>
+      <tr>
+        <td><span class="tag java">Java / Kotlin</span></td>
+        <td><span class="star">★★★</span></td>
+        <td>Spring AI + Semantic Kernel（微软）提供一定 AI 支持；企业已有 Java 技术栈可直接复用；类型安全、适合大团队协作</td>
+        <td>生态碎片化——Spring AI、LangChain4j、Semantic Kernel 三足鼎立；新框架更新慢；一个 RAG 调用可能写 50 行 Java vs 5 行 Python</td>
+        <td>大型企业 Java 技术栈（银行、保险等已有深厚 Java 基础设施）</td>
+      </tr>
+    </table>
+
+    <div class="panel good">
+      <h3>推荐结论</h3>
+      <p>本课程使用 <strong>Python</strong>。不是因为其他语言不好——而是在 RAG 这个领域，Python 的生态优势是碾压级的。2025 年的数据：</p>
+      <ul>
+        <li>PyPI 上的 RAG 相关包数量 ≈ npm + Go modules + Maven 之和的 <strong>5 倍</strong></li>
+        <li>所有主流 LLM 模型（OpenAI / 通义 / DeepSeek / Anthropic）的 <strong>首个 SDK 都是 Python</strong></li>
+        <li>HuggingFace 上 95% 的 embedding 和生成模型只提供 Python 推理接口</li>
+      </ul>
+      <p class="small">但请注意：生产环境可以<strong>混合语言</strong>。例如用 Go 写高性能检索服务 + Python 写 AI 编排层 + TypeScript 写前端。后面 L13 生产化部署中我们会看到这种模式。</p>
+    </div>
+  </section>
+
+  <!-- ===================== 第三部分：LLM 框架 ===================== -->
+  <section>
+    <h2>第三部分：LLM 调用框架对比</h2>
+
+    <p>这是让最多开发者困惑的选择。LangChain、LlamaIndex、原生 SDK……到底该用哪个？</p>
+
+    <table>
+      <tr><th>框架</th><th>定位</th><th>优势</th><th>劣势</th><th>适用场景</th></tr>
+      <tr>
+        <td><strong>LangChain</strong></td>
+        <td>通用 LLM 应用框架</td>
+        <td>生态最大（500+ integrations，从向量库到云服务一应俱全）；组件最全（Chain / Agent / Tool / Memory / Callback 全部内置）；LangSmith 可观测 + LangGraph 多智能体编排；社区活跃（GitHub 100k+ stars）</td>
+        <td>抽象层太多——一个简单的 "查向量库→调用 LLM" 被包装成 5-7 层对象，调试困难；Breaking Change 频繁（v0.1→v0.3 API 大变）；适合快速原型，但上生产需要大量额外配置；"学 LangChain 本身的时间可能比学 RAG 原理还多"</td>
+        <td>快速原型、复杂 Chain/Agent、需要 LangSmith 生产监控的团队</td>
+      </tr>
+      <tr>
+        <td><strong>LlamaIndex</strong></td>
+        <td>数据驱动的 RAG 框架</td>
+        <td>RAG 专项最强——从数据连接器（160+ 来源）、文档解析（PDF/Markdown/HTML）、索引策略（Tree / Keyword / Graph / Vector）到检索策略（Router / Auto-Retriever）全部围绕 RAG 设计；LlamaCloud 提供托管数据管道</td>
+        <td>非 RAG 场景弱——不适合做 Chatbot / Agent / 工具调用；学习曲线陡——概念多（Node / Index / Retriever / QueryEngine / PostProcessor）；文档组织不够清晰</td>
+        <td><strong>以 RAG 为核心的应用</strong>——尤其是数据接入复杂的场景</td>
+      </tr>
+      <tr>
+        <td><strong>原生 SDK</strong><br><small>（直接调用 API）</small></td>
+        <td>零框架</td>
+        <td>最轻量——pip install openai 即可，不需要任何框架；完全可控——每步代码你都能理解；无框架锁定——不会被某个框架的 Breaking Change 影响；调试直观——出问题看 OpenAI 的返回就能定位</td>
+        <td>需手写所有编排逻辑——调 retry、上下文管理、多轮对话、query rewrite 全部自己造；复用性差——公司内多个项目可能有大量重复代码；缺乏统一的可观测性</td>
+        <td>简单 RAG 管线、对框架有顾虑的团队、需要极致控制权的高级用户</td>
+      </tr>
+      <tr>
+        <td><strong>Pydantic AI</strong></td>
+        <td>类型安全的 Agent 框架（Pydantic 官方出品）</td>
+        <td>
+          <strong>Pydantic 原生</strong>——类型安全贯穿 Agent、工具、输出全链路；<strong>依赖注入</strong>——RunContext 把 DB/配置/用户 session 干净地注入工具函数；<strong>新一代设计</strong>——没有 LangChain 式多层抽象，一个 Agent 对象搞定工具注册+模型调用+结构化输出；<strong>横跨 20+ 模型</strong>——改模型名即可切换 OpenAI/Anthropic/Gemini/DeepSeek/Ollama；<strong>内置可观测</strong>——Logfire（OpenTelemetry）零配置接入；<strong>MCP 协议</strong>原生支持
+        </td>
+        <td>
+          生态还年轻（2025 年发布，GitHub ~15k stars vs LangChain 100k+）；缺乏 LangChain 式的"500+ 集成"库；中文社区刚起步；Graph 工作流功能还在快速迭代中
+        </td>
+        <td>
+          <strong>对类型安全有执念的团队</strong>、需要 Agent 调用的场景、想从零搭建可控 Agent 架构（不想要 LangChain 的抽象重担）
+        </td>
+      </tr>
+      <tr>
+        <td><strong>Haystack</strong></td>
+        <td>企业级 NLP 框架（deepset）</td>
+        <td>Pipeline 抽象清晰——比 LangChain 的 Chain 更易理解；生产部署友好——内置缓存、批处理、Pipeline 序列化；OpenSearch / ES 集成强；文档质量高</td>
+        <td>社区较小（GitHub ~18k stars）；Agent 和 Tool Use 支持弱；中文生态弱；国内用户少，排查问题困难</td>
+        <td>欧洲 / OpenSearch 生态、需要清晰 Pipeline 抽象的企业</td>
+      </tr>
+      <tr>
+        <td><strong>Dify / FastGPT</strong></td>
+        <td>低代码 RAG 平台</td>
+        <td>可视化编排——拖拽式构建 RAG 工作流；开箱即用——内置知识库管理、对话界面、API 发布；非技术人员可维护</td>
+        <td>灵活性受限——复杂逻辑需写插件/扩展；定制开发困难——底层框架锁死；性能瓶颈——大量请求走平台而非直连</td>
+        <td>内部工具、非技术团队维护、快速验证产品想法</td>
+      </tr>
+    </table>
+
+    <div class="panel warn">
+      <h3>⛔ 关于框架选择的常见陷阱</h3>
+      <ul>
+        <li><strong>用 LangChain 用了 6 个月但只用了 3 个功能</strong>——很多人引入 LangChain 只是为了让代码"看起来专业"，实际用到的东西（Embedding + VectorStore + LLM 调用）原生 SDK 50 行也能搞定。如果你不确定是否需要框架，<strong>先不要用</strong>。</li>
+        <li><strong>被框架抽象"吃掉"的错误</strong>——LangChain 的 invoke 调用可能静默 retry、换模型、走 fallback，真正的错误被层层包装，定位问题比修复问题还花时间。</li>
+        <li><strong>版本升级噩梦</strong>——LangChain v0.1 → v0.3 把 import 路径全改了（langchain → langchain_core / langchain_community），如果你的项目代码量和框架耦合度高，升级成本可能比重写还大。</li>
+      </ul>
+    </div>
+
+    <div class="panel good">
+      <h3>本课程的框架策略</h3>
+      <p>本课程明确采用<strong>"先原生，再框架"</strong>策略：</p>
+      <ul>
+        <li>L1-L7：全部用 <strong>原生 SDK</strong>（openai + chromadb），让你彻底理解 RAG 每一步的内部原理</li>
+        <li>L8-L12：继续保持原生路线，在需要的地方按需引入框架的特定模块（如 LangChain 的 document loaders）</li>
+        <li>L13 之后：我们会在生产化部署中<strong>同时给出原生方案和框架方案的对比</strong>，让你根据自己的偏好选择</li>
+        <li><strong>特例：Agent 场景（L22）</strong>——如果将来你需要多智能体协作、工具调用编排，<strong>Pydantic AI</strong> 是一个值得关注的新选项：它比 LangChain 轻、比原生 SDK 结构化，且与 Pydantic 生态原生互通</li>
+      </ul>
+      <p>这样做的好处是：无论未来 LangChain 怎么变，你理解的是底层原理——换任何框架都是换个皮。</p>
+    </div>
+  </section>
+
+  <!-- ===================== 第三点五部分：结构化输出与数据验证 ===================== -->
+  <section>
+    <h2>第三点五部分：结构化输出与数据验证（Pydantic + Instructor）</h2>
+
+    <p>在前面我们反复提到"结构化输出""函数调用""工具定义"这些概念。它们的底层有一个共同的"幕后英雄"——<strong>Pydantic</strong>。</p>
+
+    <div class="panel info">
+      <h3>🚀 Pydantic——Python 数据验证的事实标准</h3>
+      <p>Pydantic 是 Python 生态中最流行的数据验证库（<strong>月下载量 50M+</strong>），它利用 Python 的类型注解（Type Hints）来定义数据模型，自动完成验证、序列化、JSON Schema 生成。Pydantic v2 的核心验证逻辑用 Rust 重写（<strong>pydantic-core</strong>），验证速度比 v1 快 5-50 倍。</p>
+    </div>
+
+    <h3>它在 RAG 技术栈中为什么重要？</h3>
+
+    <p>如果你翻看 LangChain、LlamaIndex、FastAPI 的源码，你会发现它们<strong>所有的数据模型都是用 Pydantic 定义的</strong>。Pydantic 几乎是整个 Python RAG 生态的"地基"——只是大多数时候你不需要直接用它。但在以下几个场景中，你会直接和 Pydantic 打交道：</p>
+
+    <table>
+      <tr><th>场景</th><th>Pydantic 的角色</th><th>代码示意</th></tr>
+      <tr>
+        <td><strong>LLM 结构化输出</strong><br><small>（最关键的场景）</small></td>
+        <td>用 Pydantic 模型定义 LLM 回复的 JSON 结构，通过 Function Calling / Tool Use 让 LLM 输出符合你定义的格式</td>
+        <td><code>class Weather(BaseModel):<br>&nbsp;&nbsp;city: str<br>&nbsp;&nbsp;temp: float</code></td>
+      </tr>
+      <tr>
+        <td><strong>配置管理</strong></td>
+        <td>用 Pydantic 定义 RAG 系统的全部配置项（模型名称、embedding 维度、chunk 大小……），自动验证配置合法性</td>
+        <td><code>class RAGConfig(BaseModel):<br>&nbsp;&nbsp;chunk_size: int = Field(gt=0, le=2048)</code></td>
+      </tr>
+      <tr>
+        <td><strong>API 数据模型</strong></td>
+        <td>FastAPI + Pydantic 自动验证请求体和生成 OpenAPI 文档（L13 生产化部署中会用到）</td>
+        <td><code>class QueryRequest(BaseModel):<br>&nbsp;&nbsp;question: str<br>&nbsp;&nbsp;top_k: int = 5</code></td>
+      </tr>
+      <tr>
+        <td><strong>数据清洗与验证</strong></td>
+        <td>验证解析出的文档元数据（日期格式、金额范围、分类枚举），提前捕获脏数据</td>
+        <td><code>class DocMeta(BaseModel):<br>&nbsp;&nbsp;category: Literal["政策","产品","FAQ"]</code></td>
+      </tr>
+    </table>
+
+    <h3>Instructor——Pydantic + LLM = 结构化提取引擎</h3>
+
+    <p><a href="https://python.useinstructor.com/">Instructor</a> 是建立在 Pydantic 之上的 LLM 结构化提取库。它的核心思想很简单：<strong>你把一个 Pydantic 模型传给 LLM，它返回符合模型定义的 JSON</strong>。底层利用 LLM 的 Function Calling / Tool Use / Structured Output 能力实现。</p>
+
+    <p>一个直观的对比——<strong>没有 Pydantic</strong> vs <strong>有 Pydantic + Instructor</strong>：</p>
+
+    <div class="combo">
+      <div class="panel warn">
+        <h4>❌ 没有 Pydantic：手动解析 JSON（脆弱）</h4>
+        <pre><code>response = client.chat.completions.create(
+  model="gpt-4o-mini",
+  messages=[{"role": "user",
+    "content": "从本文提取：公司名、成立年份、营收"}],
+)
+raw = response.choices[0].message.content
+try:
+  data = json.loads(raw)
+  name = data["company_name"]  # KeyError！
+  year = int(data["year"])
+except (KeyError, ValueError, json.JSONDecodeError) as e:
+  # 手工处理各种格式异常
+  ...</code></pre>
+      </div>
+      <div class="panel good">
+        <h4>✅ 有 Pydantic + Instructor：声明式提取</h4>
+        <pre><code>from pydantic import BaseModel
+from instructor import from_openai
+
+class CompanyInfo(BaseModel):
+  company_name: str
+  founded_year: int
+  revenue: float | None = None
+
+client = from_openai(OpenAI())
+info = client.chat.completions.create(
+  model="gpt-4o-mini",
+  response_model=CompanyInfo,  # ← 声明我要什么
+  messages=[{"role": "user",
+    "content": "..."}],
+)
+print(info.company_name)   # 类型安全、自动验证
+print(info.founded_year)  # int 而非 str，已转换</code></pre>
+      </div>
+    </div>
+
+    <p>Instructor 自动处理：重试（LLM 输出格式不对时自动重试）、验证（字段类型/约束）、流式解析（逐块解析 JSON）、错误信息中文化。它支持 OpenAI、Anthropic、通义千问、Google Gemini、Cohere 等主流模型。</p>
+
+    <div class="panel info">
+      <h3>Pydantic 在 RAG 全链路中的位置</h3>
+      <p>回到本课的核心——RAG 技术栈全景图。Pydantic 不属于任何一个具体的 RAG 环节，它是<strong>横贯所有环节的"基础设施"</strong>：</p>
+      <ul>
+        <li><strong>文档解析阶段</strong>：用 Pydantic 定义文档元数据模型（日期、分类、作者），清洗脏数据</li>
+        <li><strong>分块阶段</strong>：验证 chunk 大小、overlap 参数合法性</li>
+        <li><strong>检索阶段</strong>：定义查询路由的请求/响应结构</li>
+        <li><strong>重排序阶段</strong>：定义排序结果的结构化字段</li>
+        <li><strong>生成阶段</strong>：用 Pydantic + Instructor 从 LLM 提取结构化答案</li>
+        <li><strong>评估阶段</strong>：定义评估指标的结构化 Schema，自动验证评估结果</li>
+      </ul>
+      <p>这就是为什么在 RAG 技术栈全景图中值得专门花一节了解它——<strong>Pydantic 是你几乎看不到、但几乎处处依赖的"隐形层"</strong>。</p>
+    </div>
+
+    <div class="panel good">
+      <h3>学习路线建议</h3>
+      <ul>
+        <li>📖 <strong>先读</strong>：<a href="https://docs.pydantic.dev/latest/">Pydantic 官方文档</a>的"Getting Started"和"Models"两章（30 分钟）</li>
+        <li>🔧 <strong>再用</strong>：在 L9（拒答策略）和 L10（多轮对话）中，我们会用 Pydantic 来定义配置模型和 LLM 输出结构</li>
+        <li>🚀 <strong>深入</strong>：本课程的 L6 我们介绍了 Function Calling。Instructor 让 Function Calling 的代码量减少 60%，同时获得类型安全和自动重试——<a href="https://python.useinstructor.com/">Instructor 官方教程</a>有完整的场景示例</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- ===================== 第四部分：向量数据库 ===================== -->
+  <section>
+    <h2>第四部分：向量数据库对比</h2>
+
+    <p>向量数据库是 RAG 系统的"核心存储"。选择向量库就是选择"数据存在哪里、检索性能如何、运维成本多少"。</p>
+
+    <table>
+      <tr><th>向量库</th><th>类型</th><th>检索性能</th><th>过滤能力</th><th>运维成本</th><th>中文支持</th><th>最佳场景</th></tr>
+      <tr>
+        <td><strong>Chroma</strong></td>
+        <td>嵌入式</td>
+        <td>百万级；千万级性能下降</td>
+        <td>弱（仅 metadata 等值过滤）</td>
+        <td>⭐（零运维，pip install 即可）</td>
+        <td>★★★（基本支持）</td>
+        <td><strong>本地开发 / Demo / PoC</strong></td>
+      </tr>
+      <tr>
+        <td><strong>Milvus</strong></td>
+        <td>分布式</td>
+        <td>十亿级；GPU 索引极快</td>
+        <td>强（Scalar + JSON 混合过滤）</td>
+        <td>⭐⭐⭐⭐⭐（需 etcd + Pulsar + MinIO 三件套）</td>
+        <td>★★★★（中文文档完善、有中文社区）</td>
+        <td><strong>大规模生产</strong>（千万级以上数据量）</td>
+      </tr>
+      <tr>
+        <td><strong>Qdrant</strong></td>
+        <td>分布式（Rust）</td>
+        <td>亿级；Rust 原生高性能</td>
+        <td>极强（Payload index 支持几乎所有类型过滤）</td>
+        <td>⭐⭐（单机也能跑，docker run 就启动）</td>
+        <td>★★★（官方文档英文、中文社区小）</td>
+        <td><strong>需要高性能过滤的场景</strong>（如租户隔离、时间范围查询）</td>
+      </tr>
+      <tr>
+        <td><strong>Weaviate</strong></td>
+        <td>分布式（Go）</td>
+        <td>亿级；Hybrid 搜索原生</td>
+        <td>强（GraphQL 灵活查询）</td>
+        <td>⭐⭐⭐（JVM 较重，但 Docker 部署简单）</td>
+        <td>★★（中文文档少）</td>
+        <td><strong>Hybrid 搜索优先</strong>、需要 GraphQL 接口</td>
+      </tr>
+      <tr>
+        <td><strong>Pinecone</strong></td>
+        <td>云托管（SaaS）</td>
+        <td>亿级（云上自动优化）</td>
+        <td>中（Serverless 版过滤能力有限）</td>
+        <td>⭐（零运维，托管服务）</td>
+        <td>★★★（文档英文，但 API 简洁）</td>
+        <td><strong>不想管理基础设施</strong>的团队、快速上线</td>
+      </tr>
+      <tr>
+        <td><strong>PGVector</strong></td>
+        <td>PostgreSQL 插件</td>
+        <td>千万级；索引构建慢</td>
+        <td>极强（PostgreSQL 完整 SQL 能力）</td>
+        <td>⭐（已有 PG 则零额外成本）</td>
+        <td>★★★★★（SQL 中文支持是 PG 基础能力）</td>
+        <td><strong>已有 PostgreSQL、中小规模</strong>、需要向量+元数据同一张表的事务一致性</td>
+      </tr>
+      <tr>
+        <td><strong>Elasticsearch</strong></td>
+        <td>搜索引擎+向量</td>
+        <td>亿级（ES 8.x 优化后）</td>
+        <td>极强（ES 查询 DSL + BM25 + 向量）</td>
+        <td>⭐⭐⭐（ES 运维体系成熟但集群复杂）</td>
+        <td>★★★★★（ES 中文分词 ICU/IK 生态成熟）</td>
+        <td><strong>已有 ES 基础设施</strong>、需要一种存储解决全文搜索+向量搜索</td>
+      </tr>
+    </table>
+
+    <h3>五维度评分全景</h3>
+    <table class="dim-table">
+      <tr><th>维度</th><th>Chroma</th><th>Milvus</th><th>Qdrant</th><th>Weaviate</th><th>Pinecone</th><th>PGVector</th><th>ES</th></tr>
+      <tr><td>规模支撑</td><td>⭐⭐</td><td>⭐⭐⭐⭐⭐</td><td>⭐⭐⭐⭐</td><td>⭐⭐⭐⭐</td><td>⭐⭐⭐⭐</td><td>⭐⭐⭐</td><td>⭐⭐⭐⭐</td></tr>
+      <tr><td>查询时延</td><td>⭐⭐⭐⭐</td><td>⭐⭐⭐⭐⭐</td><td>⭐⭐⭐⭐⭐</td><td>⭐⭐⭐⭐</td><td>⭐⭐⭐⭐</td><td>⭐⭐⭐</td><td>⭐⭐⭐</td></tr>
+      <tr><td>过滤能力</td><td>⭐</td><td>⭐⭐⭐⭐</td><td>⭐⭐⭐⭐⭐</td><td>⭐⭐⭐⭐</td><td>⭐⭐⭐</td><td>⭐⭐⭐⭐⭐</td><td>⭐⭐⭐⭐⭐</td></tr>
+      <tr><td>运维成本</td><td>⭐⭐⭐⭐⭐</td><td>⭐</td><td>⭐⭐⭐⭐</td><td>⭐⭐⭐</td><td>⭐⭐⭐⭐⭐</td><td>⭐⭐⭐⭐</td><td>⭐⭐⭐</td></tr>
+      <tr><td>中文生态</td><td>⭐⭐⭐</td><td>⭐⭐⭐⭐</td><td>⭐⭐⭐</td><td>⭐⭐</td><td>⭐⭐⭐</td><td>⭐⭐⭐⭐⭐</td><td>⭐⭐⭐⭐⭐</td></tr>
+    </table>
+
+    <div class="panel info">
+      <h3>向量数据库选型速查口诀</h3>
+      <ul>
+        <li><strong>Demo 开发</strong> → Chroma（最轻量）</li>
+        <li><strong>中小规模（百万级）上生产</strong> → Qdrant（单机也能跑、性能强）或 PGVector（已有 PG 则首选）</li>
+        <li><strong>大规模生产（千万级以上）</strong> → Milvus（性能最强）或 Elasticsearch（已有 ES 则首选）</li>
+        <li><strong>零运维</strong> → Pinecone（最省心、最贵）</li>
+        <li><strong>需要复杂元数据过滤</strong> → Qdrant（Payload index）或 PGVector（SQL 无限制）</li>
+        <li><strong>中文全文搜索+向量一键搞定</strong> → Elasticsearch（IK 分词+向量在一块）</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- ===================== 第五部分：Embedding 模型 ===================== -->
+  <section>
+    <h2>第五部分：Embedding 模型分类与对比</h2>
+
+    <p>Embedding 模型决定了"检索质量的天花板"——也是你在模块二（L12）将深入学习的主题。这里先建立全局分类。</p>
+
+    <table>
+      <tr><th>类别</th><th>代表模型</th><th>优势</th><th>劣势</th><th>适用场景</th></tr>
+      <tr>
+        <td><strong>闭源 API</strong></td>
+        <td>
+          <ul style="margin:0;">
+            <li>OpenAI text-embedding-3-small/large</li>
+            <li>Cohere Embed v3</li>
+            <li>通义 embedding</li>
+          </ul>
+        </td>
+        <td>效果最好（MTEB 榜单前列）；零运维——开 key 即用；多语言理解强（OpenAI 1536 维同时支持 100+ 语言）</td>
+        <td>成本随量增长（百万 token 起步 $0.2-1.0）；数据出境风险；无法微调</td>
+        <td>对精度要求最高、预算充足、数据不敏感的场景</td>
+      </tr>
+      <tr>
+        <td><strong>中文开源</strong></td>
+        <td>
+          <ul style="margin:0;">
+            <li>BAAI/bge-large-zh-v1.5</li>
+            <li>moka-ai/m3e-base/large</li>
+            <li>Infgrad/stella-base-zh</li>
+            <li>Alibaba-NLP/gte-Qwen2-7B-instruct</li>
+            <li>shibing624/text2vec-base-chinese</li>
+          </ul>
+        </td>
+        <td>中文效果接近甚至超越 OpenAI（BGE-zh 在 C-MTEB 多个任务领先）；可私有化部署（数据不出境）；免费使用</td>
+        <td>英文效果不如 OpenAI / Cohere；需要 GPU（至少 4GB 显存运行 BGE-base）；模型版本多、选型困难</td>
+        <td><strong>国内场景、数据不出境</strong>、中文为主的知识库——目前大多数中国企业的首选</td>
+      </tr>
+      <tr>
+        <td><strong>多语言开源</strong></td>
+        <td>
+          <ul style="margin:0;">
+            <li>BAAI/bge-m3（支持 100+ 语言 + 多向量）</li>
+            <li>intfloat/multilingual-e5-large</li>
+            <li>jina-embeddings-v3（1024 维）</li>
+          </ul>
+        </td>
+        <td>中英文兼顾；社区活跃（HuggingFace 下载量大）；创新结构（BGE-M3 支持稠密/稀疏/多向量三种检索模式在同一个模型）</td>
+        <td>模型大（0.5-2B 参数），推理速度慢；对中文专项优化不如 BGE-zh</td>
+        <td>多语言知识库（同时有中英文文档）</td>
+      </tr>
+      <tr>
+        <td><strong>本地部署工具</strong></td>
+        <td>
+          <ul style="margin:0;">
+            <li>Ollama（最简单）</li>
+            <li>Infinity（BAAI 出品、专为 embedding 优化）</li>
+            <li>Xinference（Web UI 管理模型）</li>
+          </ul>
+        </td>
+        <td>完全离线；零 API 费用；统一模型管理界面（Ollama pull + run 一行命令启动任何 embedding 模型）</td>
+        <td>需要 GPU（CPU 推理速度极慢）；效果不如同模型的 API 版本（因为量化精度损失）</td>
+        <td>军工 / 金融 / 医疗等高合规场景</td>
+      </tr>
+    </table>
+
+    <div class="panel info">
+      <h3>MTEB 榜单怎么看</h3>
+      <p><a href="https://huggingface.co/spaces/mteb/leaderboard">MTEB 排行榜</a> 是 embedding 模型的"世界杯"。但看榜有技巧：</p>
+      <ul>
+        <li><strong>不要只看综合排名</strong>——要看你关注的任务维度。做检索就看 <strong>Retrieval Average</strong> 这个子榜</li>
+        <li><strong>中文任务要看 C-MTEB</strong>——MTEB 主榜以英文任务为主，中文 embedding 性能要去 C-MTEB 看</li>
+        <li><strong>维度大小不是越高越好</strong>——1536 维比 768 维效果好，但存储成本翻倍、检索速度变慢</li>
+        <li><strong>排名只能参考前 10 名</strong>——前 10 之后的模型差距不大，实际效果取决于你的数据领域</li>
+      </ul>
+    </div>
+
+    <div class="panel good">
+      <h3>本课程的默认选择</h3>
+      <p>虽然 L1-L7 一直用 OpenAI 的 embedding，但从本课开始的模块二，我们将逐步切换到 <strong>BGE-M3 / BGE-zh</strong> + <strong>Ollama</strong> 本地推理的组合。原因：</p>
+      <ul>
+        <li>中文效果已足够好（C-MTEB 上 BGE-large-zh 超过 text-embedding-3-small）</li>
+        <li>零 API 费用、数据不出境</li>
+        <li>为 L12 的 embedding 模型 A/B 对比实验做准备</li>
+      </ul>
+      <p class="small">详见第 12 课《Embedding 模型全景与选型》。</p>
+    </div>
+  </section>
+
+  <!-- ===================== 第六部分：生成模型 ===================== -->
+  <section>
+    <h2>第六部分：生成模型分类与对比</h2>
+
+    <p>生成模型——也就是常说的"LLM 底座模型"——是 RAG 系统的"大脑"。它决定了回答质量的上限。</p>
+
+    <table>
+      <tr><th>类别</th><th>代表模型</th><th>优势</th><th>劣势</th><th>适用场景</th></tr>
+      <tr>
+        <td><strong>海外闭源</strong></td>
+        <td>GPT-4o / Claude 4 / Gemini 2.5</td>
+        <td>综合能力最强；推理能力突出；多模态原生支持（图片/音频/视频）</td>
+        <td>贵（GPT-4o USD $2.5/M input tokens）；数据出境；境外 API 延迟较高</td>
+        <td>对答案质量要求最高的场景、英文为主的知识库</td>
+      </tr>
+      <tr>
+        <td><strong>国内闭源</strong></td>
+        <td>
+          <ul style="margin:0;">
+            <li>通义千问 2.5 / 3</li>
+            <li>DeepSeek V3</li>
+            <li>文心一言 4.0</li>
+            <li>Kimi 月之暗面</li>
+          </ul>
+        </td>
+        <td>中文理解强（专为中文场景优化）；价格低（DeepSeek V3 仅为 GPT-4o 的 1/10）；数据合规（阿里云/百度云国内合规备案）</td>
+        <td>复杂推理弱于 GPT-4o/Claude（特别是数学、逻辑、代码生成）；部分模型多模态支持有限</td>
+        <td><strong>国内场景首选</strong>——客服 Q&A、企业知识库等中文为主的场景</td>
+      </tr>
+      <tr>
+        <td><strong>开源本地</strong></td>
+        <td>
+          <ul style="margin:0;">
+            <li>通义千问 Qwen3 系列</li>
+            <li>DeepSeek V3 / R1（满血版需高端 GPU）</li>
+            <li>Llama 4（Meta 开源）</li>
+          </ul>
+        </td>
+        <td>完全私有化——数据不出内网；零 API 费用（但需硬件投入）；可微调定制</td>
+        <td>需要大量 GPU（Qwen2.5-72B 需要 4×A100 才能跑；7B 模型可以跑消费级 GPU 但效果差距大）；小模型（7B-14B）的 RAG 效果明显不如闭源大模型</td>
+        <td>高合规场景（军工/金融/医疗）、大规模部署摊薄硬件成本（月调用量千万级以上）</td>
+      </tr>
+    </table>
+
+    <div class="panel warn">
+      <h3>⚠️ 关于"本地私有化"的真实成本</h3>
+      <p>很多人被"私有化省钱"吸引，但实际算下来可能更贵：</p>
+      <ul>
+        <li><strong>一台 A100（80GB）服务器</strong>：月租约 ¥30,000-50,000（阿里云 P100 实例）</li>
+        <li><strong>可运行的模型</strong>：Qwen2.5-32B（一张 A100 勉强跑）或 Qwen2.5-7B（消费级 GPU）</li>
+        <li><strong>小模型 vs 大模型</strong>：在 RAG 场景下，7B 模型的 Faithfulness 可能比 GPT-4o 低 10-15 个百分点——这是用效果换私有的代价</li>
+      </ul>
+      <p>现实的选择：<strong>大多数中小团队应该优先用国产闭源 API（通义/DeepSeek）</strong>，只有在明确的高合规需求（金融/军工/医疗）时再考虑私有化。</p>
+    </div>
+  </section>
+
+  <!-- ===================== 第七部分：决策框架 ===================== -->
+  <section>
+    <h2>第七部分：技术选型决策框架</h2>
+
+    <p>现在你已经知道了每个环节有哪些选择。但"选择多"不等于"决策难"——只要有一个清晰的决策框架。下面我们以典型业务场景为输入，给出推荐技术栈组合。</p>
+
+    <h3>场景→技术栈快查表</h3>
+
+    <table>
+      <tr><th>场景</th><th>推荐技术栈</th><th>选型理由</th></tr>
+      <tr>
+        <td><strong>🧑‍💻 个人学习 / 原型</strong></td>
+        <td>Python + Chroma + OpenAI</td>
+        <td>最简开发体验——pip install 三行命令跑起来。不纠结选型，专注学原理。这就是 L1-L7 的配置。</td>
+      </tr>
+      <tr>
+        <td><strong>🏢 中小企业客服 Q&A</strong></td>
+        <td>Python + LlamaIndex + Qdrant + BGE-zh + 通义千问</td>
+        <td>
+          性价比最优组合——
+          <ul style="margin:4px 0;">
+            <li>Qdrant 单机部署、Docker 一行启动</li>
+            <li>BGE-zh 中文效果好、数据不出境</li>
+            <li>通义千问国内合规、价格低</li>
+            <li>LlamaIndex 处理客服数据（工单/FAQ/聊天记录）连接器丰富</li>
+          </ul>
+        </td>
+      </tr>
+      <tr>
+        <td><strong>🏛️ 大型企业知识库</strong></td>
+        <td>Python + LangChain + Milvus + ES + BGE-M3 + DeepSeek</td>
+        <td>
+          高性能混合检索——
+          <ul style="margin:4px 0;">
+            <li>Milvus 支撑千万级向量 + ES 做全文搜索（IK 分词）</li>
+            <li>BGE-M3 同时做稠密+稀疏检索</li>
+            <li>DeepSeek 性价比极高（1/10 GPT-4o 价格、中文强）</li>
+            <li>LangChain 支撑复杂的企业级工作流（文档审批→入库→发布→回收）</li>
+          </ul>
+        </td>
+      </tr>
+      <tr>
+        <td><strong>🔐 高合规（军工/金融）</strong></td>
+        <td>Python + 原生 SDK + PGVector + Ollama（BGE-zh + Qwen）</td>
+        <td>
+          全离线、全可控——
+          <ul style="margin:4px 0;">
+            <li>PGVector 复用已有的 PG 基础设施（银行的 Oracle→PG 迁移很常见）</li>
+            <li>Ollama 全离线部署 embedding + 生成模型</li>
+            <li>原生 SDK 减少依赖攻击面</li>
+            <li>缺点是效果不如闭源方案——这是合规的必要代价</li>
+          </ul>
+        </td>
+      </tr>
+      <tr>
+        <td><strong>🌍 海外多语言</strong></td>
+        <td>Python + LlamaIndex + Pinecone + Cohere + GPT-4o</td>
+        <td>
+          零运维、多语言强——
+          <ul style="margin:4px 0;">
+            <li>Pinecone Serverless 零运维、自动扩缩容</li>
+            <li>Cohere Embed v3 支持 100+ 语言</li>
+            <li>GPT-4o 综合能力强</li>
+            <li>LlamaIndex 数据连接器支持 Salesforce/Zendesk/Confluence 等海外 SaaS</li>
+          </ul>
+        </td>
+      </tr>
+    </table>
+
+    <h3>决策树：如何快速找到你的组合</h3>
+
+    <div class="panel">
+      <pre style="background:transparent; border:none; font-size:15px; line-height:1.6;">1. 你们有已有的数据库/搜索引擎吗？
+   ├── 已有 PostgreSQL → PGVector（复用）
+   ├── 已有 Elasticsearch → ES（复用，8.x 支持向量检索）
+   └── 没有 → 问第 2 题
+
+2. 数据量大概多少？
+   ├── &lt; 100 万条 → Qdrant 或 PGVector
+   ├── 100 万 - 1000 万 → Qdrant 或 ES
+   └── &gt; 1000 万 → Milvus 或 ES
+
+3. 数据需要出境吗？
+   ├── 不 → BGE-zh + 通义/DeepSeek（国内方案）
+   └── 可以 → OpenAI + GPT-4o（海外方案最佳效果）
+
+4. 团队技术栈？
+   ├── 全 Python → 原生 SDK 或 LlamaIndex（数据复杂优先选 LlamaIndex）
+   └── 混合（Go/Python/JS）→ 原生 SDK（避免框架耦合不同语言）
+
+5. 预算？
+   ├── 紧凑 → BGE-zh + DeepSeek API（性价比之王）
+   ├── 充足 → OpenAI + GPT-4o（效果最佳）
+   └── 必须私有化 → BGE-zh + Qwen（Ollama 部署）</pre>
+    </div>
+
+    <div class="panel info">
+      <h3>一句话总结你的优先级</h3>
+      <p style="font-size:18px; text-align:center; padding:10px;">
+        <strong>先选向量库 → 再选 Embedding → 再选生成模型 → 最后选框架</strong>
+      </p>
+      <p>为什么是这个顺序？</p>
+      <ol>
+        <li><strong>向量库</strong>决定了你的数据架构和运维成本——这是最难改的（数据迁移成本高）</li>
+        <li><strong>Embedding</strong>决定了检索质量的天花板——这个改起来容易（重新算一遍向量即可），但质量基准要尽早确定</li>
+        <li><strong>生成模型</strong>决定了回答质量的上限——API 切换成本最低（改个 model 参数），可以根据预算灵活调整</li>
+        <li><strong>框架</strong>是最后的选择——好的架构应该让你未来换向量库/换模型的影响最小化，而非最大化</li>
+      </ol>
+    </div>
+  </section>
+
+  <!-- ===================== 第八部分：动手实践 ===================== -->
+  <section>
+    <h2>第八部分：动手实践——Chroma → Qdrant 迁移体验</h2>
+
+    <p>说一千道一万，不如亲手迁移一次。这一部分你将体验<strong>将向量库从 Chroma 替换为 Qdrant</strong>的全过程——看看"换一个向量库"到底要改多少代码。</p>
+
+    <div class="panel good">
+      <h3>为什么选 Qdrant？</h3>
+      <p>Qdrant 是目前从 Chroma 迁移的<strong>最佳"上生产"路径</strong>：</p>
+      <ul>
+        <li>单机部署和 Chroma 一样简单（但也支持分布式——将来需要扩展时不需要换数据库）</li>
+        <li>性能比 Chroma 好一个数量级（Rust 编写，同样的硬件 Qdrant 能支持 10x 的数据量）</li>
+        <li>API 设计干净（和 Chroma 一样 Pythonic）</li>
+        <li>过滤功能强大（后面 L9 的拒答策略和 L10 的多轮对话都会用到过滤）</li>
+      </ul>
+    </div>
+
+    <h3>第一步：安装和启动 Qdrant</h3>
+
+    <pre><code># 安装 Qdrant 客户端
+pip install qdrant-client
+
+# 启动 Qdrant 服务器（Docker）
+docker run -d --name qdrant -p 6333:6333 qdrant/qdrant
+
+# 验证运行
+curl http://localhost:6333/healthz
+# 返回 OK</code></pre>
+
+    <h3>第二步：适配层设计——让你的代码"不知道"后面是什么向量库</h3>
+
+    <p>好的架构应该让你换向量库的改动量最小化。我们定义一个 <strong>VectorStore</strong> 抽象层：</p>
+
+    <pre><code>"""
+vector_store.py — 向量存储抽象层
+当前支持：Chroma, Qdrant
+未来可扩展：MilvusClient, ESClient ...
+"""
+import os
+from typing import list
+
+# ---------- Chroma 实现 ----------
+
+class ChromaStore:
+    def __init__(self, collection_name: str = "docs"):
+        import chromadb
+        self.client = chromadb.PersistentClient(path="./chroma_data")
+        self.collection = self.client.get_or_create_collection(
+            name=collection_name,
+            metadata={"hnsw:space": "cosine"},
+        )
+
+    def add(self, ids: list[str], embeddings: list[list[float]],
+            documents: list[str], metadatas: list[dict] | None = None):
+        self.collection.add(ids=ids, embeddings=embeddings,
+                            documents=documents, metadatas=metadatas)
+
+    def query(self, query_embedding: list[float], top_k: int = 5,
+              filter: dict | None = None) -> list[dict]:
+        results = self.collection.query(
+            query_embeddings=[query_embedding],
+            n_results=top_k,
+            where=filter,
+        )
+        return [
+            {"id": results["ids"][0][i],
+             "text": results["documents"][0][i],
+             "score": results["distances"][0] if results.get("distances") else None}
+            for i in range(len(results["ids"][0]))
+        ]
+
+
+# ---------- Qdrant 实现 ----------
+
+class QdrantStore:
+    def __init__(self, collection_name: str = "docs", vector_size: int = 768):
+        from qdrant_client import QdrantClient
+        from qdrant_client.http.models import Distance, VectorParams
+        self.client = QdrantClient(host="localhost", port=6333)
+        self.collection_name = collection_name
+
+        # 检查集合是否存在，不存在则创建
+        existing = self.client.collection_exists(collection_name)
+        if not existing:
+            self.client.create_collection(
+                collection_name=collection_name,
+                vectors_config=VectorParams(
+                    size=vector_size,
+                    distance=Distance.COSINE,
+                ),
+            )
+
+    def add(self, ids: list[str], embeddings: list[list[float]],
+            documents: list[str], metadatas: list[dict] | None = None):
+        from qdrant_client.http.models import PointStruct
+        points = []
+        for i, doc_id in enumerate(ids):
+            payload = {"text": documents[i], ** (metadatas[i] if metadatas else {})}
+            points.append(PointStruct(
+                id=hash(doc_id) % (2**63),  # Qdrant 要求整数 ID
+                vector=embeddings[i],
+                payload=payload,
+            ))
+        self.client.upsert(
+            collection_name=self.collection_name,
+            points=points,
+        )
+
+    def query(self, query_embedding: list[float], top_k: int = 5,
+              filter: dict | None = None) -> list[dict]:
+        from qdrant_client.http.models import Filter as QdrantFilter, FieldCondition, MatchValue
+
+        qdrant_filter = None
+        if filter:
+            conditions = [
+                FieldCondition(key=k, match=MatchValue(v))
+                for k, v in filter.items()
+            ]
+            qdrant_filter = QdrantFilter(must=conditions)
+
+        results = self.client.search(
+            collection_name=self.collection_name,
+            query_vector=query_embedding,
+            limit=top_k,
+            query_filter=qdrant_filter,
+        )
+        return [
+            {"id": r.id, "text": r.payload.get("text", ""),
+             "score": r.score}
+            for r in results
+        ]
+
+
+# ---------- 工厂函数 ----------
+
+def create_vector_store(backend: str = "chroma", **kwargs):
+    """根据名称创建对应的向量存储实例"""
+    if backend == "chroma":
+        return ChromaStore(**kwargs)
+    elif backend == "qdrant":
+        return QdrantStore(**kwargs)
+    elif backend == "milvus":
+        raise NotImplementedError("Milvus 实现待完成——现在你来写？")
+    else:
+        raise ValueError(f"未知的向量库类型: {backend}")
+
+
+# ---------- 快速测试 ----------
+if __name__ == "__main__":
+    # 测试 Qdrant 基本功能
+    store = create_vector_store("qdrant")
+    store.add(
+        ids=["doc1", "doc2"],
+        embeddings=[[0.1, 0.2, 0.3], [0.4, 0.5, 0.6]],
+        documents=["今天天气很好", "明天可能下雨"],
+        metadatas=[{"source": "weather"}, {"source": "weather"}],
+    )
+    results = store.query([0.1, 0.2, 0.3], top_k=2)
+    for r in results:
+        print(f"  [{r['id']}] {r['text']} (score: {r['score']:.4f})")</code></pre>
+
+    <div class="panel info">
+      <h3>关键观察：迁移的改动量</h3>
+      <p>从 Chroma 迁移到 Qdrant，你需要改动的代码量大约是：</p>
+      <ul>
+        <li><strong>核心改动</strong>：1 个适配层文件（约 60 行 QdrantStore 实现）</li>
+        <li><strong>调用方改动</strong>：0 行——如果你之前已经用了 <code>create_vector_store()</code> 工厂函数，只需要把 <code>backend="chroma"</code> 改成 <code>backend="qdrant"</code></li>
+        <li><strong>新增依赖</strong>：<code>pip install qdrant-client</code> + Docker 运行 Qdrant 服务器</li>
+        <li><strong>总耗时</strong>：第一次做大约 30 分钟——包括阅读 Qdrant 文档和调试</li>
+      </ul>
+      <p>这就是<strong>适配器模式</strong>的价值：通过薄薄的一层抽象，让核心业务逻辑不依赖特定向量库的实现细节。</p>
+    </div>
+
+    <div class="panel warn">
+      <h3>⚠️ 迁移中的陷阱</h3>
+      <ul>
+        <li><strong>ID 格式差异</strong>：Chroma 接受字符串 ID，Qdrant 需要无符号 64 位整数。上面我们用 <code>hash(doc_id) % (2**63)</code> 做了转换——但哈希冲突在小数据集上几乎不存在，生产环境建议用更可靠的方法（如 UUID 分 ID 段的映射表）。</li>
+        <li><strong>过滤语法差异</strong>：Chroma 用 <code>where={"field": "value"}</code>，Qdrant 用 <code>Filter(must=[FieldCondition(key="field", match=MatchValue("value"))])</code>——注意这个差异在其他向量库中也会存在（Milvus 的过滤语法又不同）。</li>
+        <li><strong>维度必须一致</strong>：新创建 Qdrant 集合时指定的 <code>vector_size</code> 必须等于你的 embedding 维度。换了 embedding 模型（如 768→1024 维）你需要重建集合——这是向量库的通病。</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- ===================== 交互式测验 ===================== -->
+  <section>
+    <h2>交互式测验</h2>
+    <p>检验你对 RAG 技术栈全景的理解——尤其是<strong>选型决策</strong>部分。</p>
+
+    <div class="panel">
+      <h3>问题 1</h3>
+      <p>你是一个中小企业的开发者，需要做一个<strong>客服 Q&A 系统</strong>，中文为主、数据量约 50 万条、预算紧凑、希望数据不出境。最合理的技术栈组合是？</p>
+      <div class="quiz" id="q1">
+        <button onclick="answerQ('q1',0)">A. Python + LangChain + Pinecone + OpenAI + GPT-4o</button>
+        <button onclick="answerQ('q1',1)">B. Python + 原生 SDK + Qdrant + BGE-zh + 通义千问</button>
+        <button onclick="answerQ('q1',2)">C. Go + Chroma + Cohere + Claude 4</button>
+        <button onclick="answerQ('q1',3)">D. Python + LlamaIndex + Milvus + DeepSeek + 文心一言</button>
+      </div>
+      <div class="feedback" id="q1-fb"></div>
+    </div>
+
+    <div class="panel">
+      <h3>问题 2</h3>
+      <p>以下关于 LangChain 的说法，哪一项是<strong>不正确的</strong>？</p>
+      <div class="quiz" id="q2">
+        <button onclick="answerQ('q2',0)">A. LangChain 有 500+ 集成，是生态最丰富的 LLM 框架</button>
+        <button onclick="answerQ('q2',1)">B. LangChain 的抽象层让代码更容易调试和定位问题</button>
+        <button onclick="answerQ('q2',2)">C. LangChain 的版本迭代快，升级时可能出现 Breaking Change</button>
+        <button onclick="answerQ('q2',3)">D. LangChain 适合快速原型，但上生产需要额外工作</button>
+      </div>
+      <div class="feedback" id="q2-fb"></div>
+    </div>
+
+    <div class="panel">
+      <h3>问题 3</h3>
+      <p>你的团队已有成熟的 <strong>Elasticsearch</strong> 基础设施，现在需要增加 RAG 功能。最合理的选择是？</p>
+      <div class="quiz" id="q3">
+        <button onclick="answerQ('q3',0)">A. 推翻现有架构，改用 Milvus——ES 做向量不行</button>
+        <button onclick="answerQ('q3',1)">B. 在 ES 中内嵌向量检索（ES 8.x 支持）——复用已有的 ES 集群</button>
+        <button onclick="answerQ('q3',2)">C. 用 Qdrant 做向量检索，和 ES 双写——RAG 查询时从两个库检索</button>
+        <button onclick="answerQ('q3',3)">D. 用 Chroma 做向量检索，因为最轻量</button>
+      </div>
+      <div class="feedback" id="q3-fb"></div>
+    </div>
+
+    <div class="panel">
+      <h3>问题 4</h3>
+      <p>技术选型决策框架建议的<strong>正确顺序</strong>是？</p>
+      <div class="quiz" id="q4">
+        <button onclick="answerQ('q4',0)">A. 框架 → 向量库 → Embedding → 生成模型</button>
+        <button onclick="answerQ('q4',1)">B. 生成模型 → 框架 → 向量库 → Embedding</button>
+        <button onclick="answerQ('q4',2)">C. 向量库 → Embedding → 生成模型 → 框架</button>
+        <button onclick="answerQ('q4',3)">D. 编程语言 → 框架 → 生成模型 → 向量库</button>
+      </div>
+      <div class="feedback" id="q4-fb"></div>
+    </div>
+
+    <div class="panel">
+      <h3>问题 5</h3>
+      <p>关于 <strong>Pydantic</strong> 在 RAG 技术栈中的角色，以下哪项描述<strong>不正确</strong>？</p>
+      <div class="quiz" id="q5">
+        <button onclick="answerQ('q5',0)">A. Pydantic 是 Python 的数据验证库，LangChain/LlamaIndex/FastAPI 的内部数据模型都基于它</button>
+        <button onclick="answerQ('q5',1)">B. Pydantic v2 的验证逻辑用 Rust 实现，比 v1 快 5-50 倍</button>
+        <button onclick="answerQ('q5',2)">C. Pydantic 是一个 LLM 调用框架，类似于 LangChain 的替代品</button>
+        <button onclick="answerQ('q5',3)">D. Instructor 库将 Pydantic 模型和 LLM 函数调用结合，实现结构化提取</button>
+      </div>
+      <div class="feedback" id="q5-fb"></div>
+    </div>
+  </section>
+
+  <!-- ===================== 练习题 ===================== -->
+  <section>
+    <h2>练习题</h2>
+    <p>动手实践可以帮助你巩固今天的全景认知。</p>
+
+    <div class="task">
+      <h3>练习 1：画出你的 RAG 技术选型地图</h3>
+      <ol>
+        <li>拿出一张白纸（或者画图工具），画出 RAG 核心链路的 7 个环节</li>
+        <li>在每个环节<strong>标出你现在使用的技术</strong>（如 Embedding → OpenAI text-embedding-3-small）</li>
+        <li>在每个环节<strong>列出 2-3 个备选方案</strong>（如向量库：现在用 Chroma，备选 Qdrant / PGVector）</li>
+        <li>用✅标注"当前选择"，用🔄标注"如果上生产可能会换的"</li>
+        <li>为每个"可能会换"的选项写一句话理由（如"Qdrant 单机部署简单，性能比 Chroma 好 10x"）</li>
+      </ol>
+    </div>
+
+    <div class="task">
+      <h3>练习 2：Chroma → Qdrant 迁移实操</h3>
+      <ol>
+        <li>安装 Docker 并启动 Qdrant 容器（<code>docker run -d --name qdrant -p 6333:6333 qdrant/qdrant</code>）</li>
+        <li>将上面的 <code>vector_store.py</code> 保存到你的项目目录</li>
+        <li>用你的 L2 demo 中的文档数据（或 L3 的 PDF 解析数据），先通过 ChromaStore 入库</li>
+        <li>切换到 QdrantStore，用同样的 embedding 和同样的文档再入库一次</li>
+        <li>对同样的查询，对比 Chroma 和 Qdrant 的检索结果——结果应该几乎一致（因为底层 embedding 一样）</li>
+        <li>尝试 Qdrant 的过滤功能：给文档加上 <code>{"category": "退货政策"}</code> 元数据，查询时只检索某个分类</li>
+      </ol>
+    </div>
+
+    <div class="task">
+      <h3>练习 3：选型决策模拟</h3>
+      <p>假设你收到以下三个需求，给每个需求推荐完整的技术栈并说明理由（各用 3-5 句话）：</p>
+      <ol>
+        <li><strong>场景 A</strong>：某跨境电商（英语为主）需要一个客服 RAG，预算充足，团队 3 人全是 Python 开发者，数据量约 200 万条商品信息。</li>
+        <li><strong>场景 B</strong>：某银行需要一个内部制度查询系统，数据高度敏感（不能出内网），团队能拿到 2 张 A100 显卡。</li>
+        <li><strong>场景 C</strong>：你个人的博客/笔记知识库，数据量 5000 条 PDF 笔记，零预算。</li>
+      </ol>
+    </div>
+
+    <div class="task">
+      <h3>练习 4：用 Pydantic 定义你的 RAG 配置模型</h3>
+      <p>在本课之前，RAG 系统的参数（chunk_size、overlap、model_name、top_k）可能分散在代码各处。用 Pydantic 把它们整合成一个配置模型：</p>
+      <ol>
+        <li>定义一个 <code>RAGConfig(BaseModel)</code>，包含：<code>chunk_size: int</code>（约束：大于 0，小于 4096）、<code>overlap: int</code>（约束：大于等于 0，小于 chunk_size）、<code>embedding_model: str</code>（默认 "BAAI/bge-small-zh-v1.5"）、<code>llm_model: str</code>（默认 "gpt-4o-mini"）、<code>top_k: int</code>（默认 5，约束：1-50）</li>
+        <li>尝试传入非法值（如 <code>chunk_size=-100</code>）——观察 Pydantic 的报错信息</li>
+        <li>用 <code>model.model_dump_json()</code> 将配置导出为 JSON，观察自动生成的字段</li>
+      </ol>
+    </div>
+
+    <div class="panel good">
+      <h3>完成后请问自己</h3>
+      <ul>
+        <li>你现在的技术栈中，哪个环节是你最想替换的？为什么？</li>
+        <li>MISSION.md 中的客服 Q&A 场景——如果用本课的决策框架，你会推荐你自己用什么技术栈？</li>
+        <li>如果你今天刚开始做 RAG，你会先用框架还是原生 SDK？你的理由变了吗？</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- ===================== 从本课到下一课 ===================== -->
+  <section>
+    <h2>从本课到下一课</h2>
+
+    <p>通过本课，你已经建立了 RAG 技术栈的全局认知。你知道 Python 是 RAG 领域的主导语言、原生 SDK 小而美、Qdrant 是 Chroma 的自然生产升级、BGE 是中文 embedding 的领跑者、DeepSeek/通义是国内生成模型的性价比之选。你还了解了 Pydantic — Python RAG 生态中无处不在的数据验证基石，以及 Instructor 如何让 LLM 结构化输出变得简单可靠。</p>
+
+    <p>但知道"有哪些选择"只是第一步。接下来你要解决一个更为紧迫的问题：<strong>当知识库中没有正确答案时，系统应该怎么办？</strong></p>
+
+    <p><strong>下一课（第 9 课）：《RAG 拒绝策略与兜底机制》</strong>——当检索结果为空、检索置信度低、用户问的是知识库范围之外的内容时，系统如何诚实拒答而非编造幻觉？我们将实现：检索结果置信度评估、"我不知道"三类回答模板、多层兜底链（本地→联网→人工）、以及知识库覆盖度检测。</p>
+
+    <p>学完 L9 后，模块二将继续深入：<strong>L10 对话式 RAG</strong>（多轮对话与指代消解）→ <strong>L11 Prompt Engineering</strong>（减少幻觉的 prompt 设计）→ <strong>L12 Embedding 模型选型</strong>（A/B 实验驱动选型）。</p>
+
+    <p class="small" style="margin-top: 30px;">有疑问？随时问我——无论是选型困惑、迁移中遇到的技术问题、还是想深入讨论你所在场景的最佳技术栈。本课速查表：<a href="../reference/0008-rag-tech-stack-overview-cheatsheet.html">RAG 技术栈全景速查表</a>。</p>
+  </section>
+</main>
+
+<script>
+const ANSWERS = {
+  q1: 1,  // B
+  q2: 1,  // B
+  q3: 1,  // B
+  q4: 2,  // C
+  q5: 2,  // C
+};
+
+const FEEDBACK = {
+  q1: {
+    0: "❌ Pinecone + OpenAI 数据出境、成本高，不适合"数据不出境+预算紧凑"的需求。LangChain 对小团队来说也偏重。",
+    1: "✅ 完全正确！Qdrant 单机部署简单、BGE-zh 中文效果好且免费、通义千问国内合规价格低、原生 SDK 轻量可控。",
+    2: "❌ Go 的 RAG 生态非常弱；Chroma 不支持生产级数据量；Cohere+Claude 数据出境且成本高。",
+    3: "❌ Milvus 对 50 万条数据来说重型了（需要 etcd+Pulsar+MinIO），DevOps 成本太高。",
+  },
+  q2: {
+    0: "✅ 这说的是对的——LangChain 确实有 500+ 集成，生态最大。",
+    1: "❌ 这是不正确的！LangChain 的抽象层是它最大的痛点——多层包装导致定位问题非常困难，而不是"更容易调试"。",
+    2: "✅ 这也是对的——LangChain v0.1→v0.3 改了大量 API。",
+    3: "✅ 这是对的——快速原型很好，上生产需要额外配置 LangServe、LangSmith 等。",
+  },
+  q3: {
+    0: "❌ 推翻现有架构成本太高、风险太大。ES 8.x 的向量检索已经很成熟了。",
+    1: "✅ 正确！ES 8.x 原生支持向量检索（dense_vector + kNN search），可以利用既有 ES 基础设施同时做全文搜索和向量检索。",
+    2: "❌ 双写方案（ES + Qdrant）增加了系统复杂度和运维成本，对已有 ES 的团队不是最优选择。",
+    3: "❌ Chroma 不支持分布式，不适合生产环境的数据量和可靠性要求。",
+  },
+  q4: {
+    0: "❌ 框架是最后选的——先选基础设施（向量库），再选模型，框架最后考虑。",
+    1: "❌ 生成模型和框架都不是第一个应该选的。向量库最难改，优先选。",
+    2: "✅ 正确！向量库最核心（数据架构、最难改）→ Embedding（检索质量天花板）→ 生成模型（回答质量上限、最容易换）→ 框架（最后决定、影响最小）。",
+    3: "❌ 编程语言通常已经在项目开始时决定了，不算是"选型"的一步。框架也不是优先选的。",
+  },
+  q5: {
+    0: "✅ Pydantic 确实被 LangChain、LlamaIndex、FastAPI 等广泛用作底层数据模型的基础。描述正确。",
+    1: "✅ Pydantic v2 用 Rust（pydantic-core）重写了验证逻辑，性能确实比 v1 提升 5-50 倍。描述正确。",
+    2: "❌ 这是不正确的！Pydantic 是<strong>数据验证库</strong>，不是 LLM 调用框架。它常被 LLM 框架用作内部数据建模工具，本身不提供 LLM 调用能力。",
+    3: "✅ Instructor 确实将 Pydantic 模型作为 response_model 传给 LLM 实现结构化提取。描述正确。",
+  },
+};
+
+function answerQ(qid, choice) {
+  const btns = document.querySelectorAll(`#${qid} button`);
+  btns.forEach((b, i) => {
+    b.classList.remove("selected", "correct", "wrong");
+    if (i === choice) {
+      b.classList.add(i === ANSWERS[qid] ? "correct" : "wrong");
+    }
+    if (i === ANSWERS[qid] && i !== choice) {
+      b.classList.add("correct");
+    }
+  });
+  const fb = document.getElementById(`${qid}-fb`);
+  fb.textContent = FEEDBACK[qid][choice] || "";
+}
+</script>
+</body>
+</html>

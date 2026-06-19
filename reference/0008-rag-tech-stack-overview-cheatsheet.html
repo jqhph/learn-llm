@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>RAG 技术栈全景速查表</title>
+  <style>
+    :root { --ink:#172033; --muted:#667085; --line:#d7dde8; --accent:#0f766e; --bg:#fbfcfe; }
+    * { box-sizing:border-box; }
+    body { margin:0; font:14px/1.6 ui-sans-serif,system-ui,-apple-system,Segoe UI,sans-serif; color:var(--ink); background:var(--bg); }
+    .page { max-width:900px; margin:0 auto; padding:30px 20px; }
+    h1 { font-size:22px; margin:0 0 6px; }
+    .sub { color:var(--muted); font-size:14px; margin-bottom:18px; }
+    h2 { font-size:15px; margin:18px 0 6px; border-bottom:1px solid var(--line); padding-bottom:3px; }
+    h3 { font-size:14px; margin:12px 0 4px; }
+    table { border-collapse:collapse; width:100%; margin:4px 0 10px; font-size:13px; }
+    th, td { border:1px solid var(--line); padding:5px 8px; text-align:left; }
+    th { background:#f0f2f5; font-weight:700; }
+    code { background:#eef6f5; padding:1px 4px; border-radius:3px; font-size:0.92em; }
+    pre { background:#f6f8fa; border:1px solid var(--line); border-radius:6px; padding:8px; font-size:12px; line-height:1.5; overflow:auto; }
+    ul { margin:4px 0 8px; padding-left:18px; }
+    li { margin:2px 0; }
+    .star { color:#f5b342; }
+    .rec { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin:6px 0; }
+    .rec-item { border:1px solid var(--line); border-radius:6px; padding:8px; font-size:12.5px; }
+    .rec-item h4 { margin:0 0 3px; font-size:13px; }
+    @media (max-width:640px) { .rec { grid-template-columns:1fr; } }
+    @media print { body { background:white; } .page { max-width:none; padding:12mm; } table { font-size:11px; } }
+  </style>
+</head>
+<body>
+<div class="page">
+  <h1>🧭 RAG 技术栈全景速查表</h1>
+  <div class="sub">第 8 课 · 从"一个 Demo"到"一套方案" · <a href="../lessons/0008-rag-tech-stack-overview.html">回课程</a></div>
+
+  <h2>一、编程语言</h2>
+  <table>
+    <tr><th>语言</th><th>生态</th><th>最佳用途</th></tr>
+    <tr><td>Python</td><td><span class="star">★★★★★</span></td><td><strong>90% RAG 场景首选</strong>——生态碾压</td></tr>
+    <tr><td>JS/TS</td><td><span class="star">★★★★</span></td><td>前端全栈 / Edge Runtime</td></tr>
+    <tr><td>Go</td><td><span class="star">★★★</span></td><td>高性能检索微服务（与 Python AI 层配合）</td></tr>
+    <tr><td>Java</td><td><span class="star">★★★</span></td><td>大型企业 Java 技术栈复用</td></tr>
+  </table>
+
+  <h2>二、LLM 框架速览</h2>
+  <table>
+    <tr><th>框架</th><th>一句话定位</th><th>最佳场景</th></tr>
+    <tr><td><strong>LangChain</strong></td><td>通用 LLM 应用框架（500+ 集成）</td><td>快速原型、Agent</td></tr>
+    <tr><td><strong>LlamaIndex</strong></td><td>数据驱动的 RAG 框架</td><td>数据接入复杂的 RAG</td></tr>
+    <tr><td><strong>原生 SDK</strong></td><td>零框架，直接调用 API</td><td>简单 RAG、对框架有顾虑</td></tr>
+    <tr><td><strong>Haystack</strong></td><td>企业级 NLP Pipeline</td><td>ES/OpenSearch 生态</td></tr>
+    <tr><td><strong>Dify/FastGPT</strong></td><td>低代码可视化 RAG 平台</td><td>非技术团队、内部工具</td></tr>
+  </table>
+  <p style="font-size:12.5px;margin:2px 0;"><strong>本课策略：</strong>"先原生，再框架"——L1-L12 用原生 SDK 理解原理，之后按需引入框架。</p>
+
+  <h2>三、结构化输出与数据验证（Pydantic + Instructor）</h2>
+  <table>
+    <tr><th>工具</th><th>一句话定位</th><th>在 RAG 中的作用</th></tr>
+    <tr><td><strong>Pydantic</strong></td><td>Python 数据验证库（月下载 50M+）</td><td>类型安全的配置管理、API 数据模型、LLM 输出 Schema 定义；v2 用 Rust 内核，验证快 5-50×</td></tr>
+    <tr><td><strong>Instructor</strong></td><td>Pydantic + LLM = 结构化提取</td><td>传 Pydantic 模型给 LLM → 返回类型化 JSON；自动重试+验证+流式解析；支持 OpenAI/通义/Anthropic/Cohere</td></tr>
+  </table>
+  <pre><code>from pydantic import BaseModel
+from instructor import from_openai
+
+class CompanyInfo(BaseModel):
+  company_name: str
+  founded_year: int
+  revenue: float | None = None
+
+client = from_openai(OpenAI())
+info = client.chat.completions.create(
+  model="gpt-4o-mini",
+  response_model=CompanyInfo,  # 声明式结构化提取
+  messages=[{"role":"user","content":"..."}],
+)
+print(info.company_name)  # 类型安全，str
+print(info.founded_year)  # 自动转为 int</code></pre>
+
+  <h2>四、向量数据库五维评分</h2>
+  <table>
+    <tr><th>向量库</th><th>规模</th><th>时延</th><th>过滤</th><th>运维</th><th>中文</th><th>一句话选型</th></tr>
+    <tr><td><strong>Chroma</strong></td><td>⭐⭐</td><td>⭐⭐⭐⭐</td><td>⭐</td><td>⭐⭐⭐⭐⭐</td><td>⭐⭐⭐</td><td>Demo / PoC 首选</td></tr>
+    <tr><td><strong>Milvus</strong></td><td>⭐⭐⭐⭐⭐</td><td>⭐⭐⭐⭐⭐</td><td>⭐⭐⭐⭐</td><td>⭐</td><td>⭐⭐⭐⭐</td><td>大规模生产（千万级+）</td></tr>
+    <tr><td><strong>Qdrant</strong></td><td>⭐⭐⭐⭐</td><td>⭐⭐⭐⭐⭐</td><td>⭐⭐⭐⭐⭐</td><td>⭐⭐⭐⭐</td><td>⭐⭐⭐</td><td>中等规模 + 强过滤需求</td></tr>
+    <tr><td><strong>Weaviate</strong></td><td>⭐⭐⭐⭐</td><td>⭐⭐⭐⭐</td><td>⭐⭐⭐⭐</td><td>⭐⭐⭐</td><td>⭐⭐</td><td>Hybrid 搜索原生</td></tr>
+    <tr><td><strong>Pinecone</strong></td><td>⭐⭐⭐⭐</td><td>⭐⭐⭐⭐</td><td>⭐⭐⭐</td><td>⭐⭐⭐⭐⭐</td><td>⭐⭐⭐</td><td>零运维托管</td></tr>
+    <tr><td><strong>PGVector</strong></td><td>⭐⭐⭐</td><td>⭐⭐⭐</td><td>⭐⭐⭐⭐⭐</td><td>⭐⭐⭐⭐</td><td>⭐⭐⭐⭐⭐</td><td>已有 PG 则复用</td></tr>
+    <tr><td><strong>ES 8.x</strong></td><td>⭐⭐⭐⭐</td><td>⭐⭐⭐</td><td>⭐⭐⭐⭐⭐</td><td>⭐⭐⭐</td><td>⭐⭐⭐⭐⭐</td><td>已有 ES 则复用</td></tr>
+  </table>
+
+  <h2>五、Embedding 模型分类</h2>
+  <table>
+    <tr><th>类别</th><th>代表模型</th><th>特点</th></tr>
+    <tr><td><strong>闭源 API</strong></td><td>OpenAI text-embedding-3 / Cohere / 通义</td><td>效果最好，有成本，数据出境</td></tr>
+    <tr><td><strong>中文开源</strong></td><td>BGE-zh / m3e / stella / GTE / text2vec</td><td>中文接近 OpenAI，免费私有化</td></tr>
+    <tr><td><strong>多语言</strong></td><td>BGE-M3 / E5 / jina-embeddings-v3</td><td>中英文兼顾，模型大</td></tr>
+    <tr><td><strong>本地工具</strong></td><td>Ollama / Infinity / Xinference</td><td>完全离线，需 GPU</td></tr>
+  </table>
+
+  <h2>六、生成模型分类</h2>
+  <table>
+    <tr><th>类别</th><th>代表模型</th><th>特点</th></tr>
+    <tr><td><strong>海外闭源</strong></td><td>GPT-4o / Claude 4 / Gemini 2.5</td><td>最强推理，贵，数据出境</td></tr>
+    <tr><td><strong>国内闭源</strong></td><td>通义千问 / DeepSeek V3 / 文心</td><td>中文强，价格低，合规</td></tr>
+    <tr><td><strong>开源本地</strong></td><td>Qwen / DeepSeek / Llama (via Ollama/vLLM)</td><td>完全私有，需 GPU 投入</td></tr>
+  </table>
+
+  <h2>七、场景→推荐技术栈</h2>
+  <div class="rec">
+    <div class="rec-item">
+      <h4>🧑‍💻 个人学习 / 原型</h4>
+      <div>Python + Chroma + OpenAI</div>
+      <div style="color:var(--muted);">pip install 三行命令跑起来</div>
+    </div>
+    <div class="rec-item">
+      <h4>🏢 中小企业客服 Q&A</h4>
+      <div>Python + Qdrant + BGE-zh + 通义千问</div>
+      <div style="color:var(--muted);">性价比最优、中文好、数据不出境</div>
+    </div>
+    <div class="rec-item">
+      <h4>🏛️ 大型企业知识库</h4>
+      <div>Python + Milvus + ES + BGE-M3 + DeepSeek</div>
+      <div style="color:var(--muted);">高性能混合检索、可私有化</div>
+    </div>
+    <div class="rec-item">
+      <h4>🔐 高合规（军工/金融）</h4>
+      <div>Python + PGVector + Ollama(BGE-zh + Qwen)</div>
+      <div style="color:var(--muted);">全离线、全可控</div>
+    </div>
+    <div class="rec-item">
+      <h4>🌍 海外多语言</h4>
+      <div>Python + Pinecone + Cohere + GPT-4o</div>
+      <div style="color:var(--muted);">零运维、多语言强</div>
+    </div>
+  </div>
+
+  <h2>八、选型决策要点</h2>
+  <table>
+    <tr><th>决策顺序</th><th>组件</th><th>选择理由</th><th>切换成本</th></tr>
+    <tr><td>1️⃣</td><td><strong>向量库</strong></td><td>数据架构、最难改</td><td>高（需数据迁移）</td></tr>
+    <tr><td>2️⃣</td><td><strong>Embedding</strong></td><td>检索质量天花板</td><td>中（重新算向量）</td></tr>
+    <tr><td>3️⃣</td><td><strong>生成模型</strong></td><td>回答质量上限</td><td>低（改 model 参数）</td></tr>
+    <tr><td>4️⃣</td><td><strong>框架</strong></td><td>编排方式</td><td>中（代码重构）</td></tr>
+  </table>
+
+  <h2>九、Qdrant 快速启动</h2>
+  <pre><code># 安装
+pip install qdrant-client
+docker run -d --name qdrant -p 6333:6333 qdrant/qdrant
+
+# 创建集合 & 写入
+from qdrant_client import QdrantClient
+from qdrant_client.http.models import Distance, VectorParams, PointStruct
+
+client = QdrantClient(host="localhost", port=6333)
+client.create_collection("my_collection",
+    vectors_config=VectorParams(size=768, distance=Distance.COSINE))
+client.upsert("my_collection", points=[
+    PointStruct(id=hash("doc1")%(2**63), vector=[0.1]*768,
+                payload={"text": "文档内容", "category": "政策"}),
+])
+
+# 检索
+results = client.search("my_collection", query_vector=[0.1]*768, limit=5)</code></pre>
+
+  <h2>十、资源</h2>
+  <ul>
+    <li><a href="https://qdrant.tech/documentation/">Qdrant 官方文档</a></li>
+    <li><a href="https://milvus.io/docs">Milvus 官方文档</a></li>
+    <li><a href="https://python.langchain.com/docs/introduction/">LangChain 官方文档</a></li>
+    <li><a href="https://docs.llamaindex.ai/en/stable/">LlamaIndex 官方文档</a></li>
+    <li><a href="https://huggingface.co/spaces/mteb/leaderboard">MTEB 排行榜</a>（Embedding 模型"世界杯"）</li>
+    <li><a href="https://ollama.com/">Ollama（本地模型部署）</a></li>
+    <li><a href="https://docs.pydantic.dev/latest/">Pydantic 官方文档</a>（Python 数据验证基石）</li>
+    <li><a href="https://python.useinstructor.com/">Instructor 官方文档</a>（Pydantic + LLM 结构化提取）</li>
+    <li><a href="../lessons/0008-rag-tech-stack-overview.html">📖 第 8 课：RAG 技术栈全景图</a></li>
+  </ul>
+</div>
+</body>
+</html>
