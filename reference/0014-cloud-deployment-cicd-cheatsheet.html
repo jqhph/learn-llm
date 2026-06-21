@@ -1,0 +1,295 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>云部署与 CI/CD · 速查表</title>
+  <style>
+    :root { color-scheme:light; --ink:#172033; --muted:#667085; --line:#d7dde8; --accent:#0f766e; --bg:#fbfcfe; }
+    * { box-sizing:border-box; }
+    body { margin:0; font:16px/1.6 ui-serif,Georgia,"Noto Serif SC",serif; color:var(--ink); background:var(--bg); }
+    .page { max-width:1000px; margin:0 auto; padding:30px 20px 60px; }
+    h1 { font-size:clamp(26px,4vw,42px); margin:10px 0 6px; }
+    h2 { font-size:20px; margin:28px 0 10px; border-bottom:2px solid var(--line); padding-bottom:4px; }
+    h3 { font-size:16px; margin:18px 0 6px; }
+    p { margin:0 0 10px; }
+    a { color:#0b5cad; }
+    code { background:#eef6f5; padding:2px 5px; border-radius:4px; font:13px ui-monospace,monospace; }
+    pre { background:#f6f8fa; border:1px solid var(--line); border-radius:6px; padding:10px; font-size:13px; overflow-x:auto; font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; }
+    table { border-collapse:collapse; width:100%; margin:12px 0; font-size:14px; }
+    th, td { border:1px solid var(--line); padding:6px 10px; text-align:left; }
+    th { background:#f6f8fa; font-weight:700; }
+    .tag { display:inline-block; border-radius:4px; padding:2px 7px; font-size:12px; font-weight:700; color:#fff; font-family:ui-sans-serif,system-ui; }
+    .tag.dkr { background:#1e40af; } .tag.ssl { background:#b45309; } .tag.cicd { background:#7c3aed; } .tag.sec { background:#a10e25; } .tag.cfg { background:#0891b2; }
+    .card { border:1px solid var(--line); border-radius:8px; padding:12px; margin:10px 0; }
+    .good { color:#116329; } .bad { color:#a10e25; }
+    ul, ol { padding-left:20px; margin:6px 0; }
+    .two-col { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin:10px 0; }
+    .pull { background:#fafbfc; border-left:4px solid var(--accent); padding:8px 12px; margin:10px 0; font-size:14px; }
+    @media print { body { background:white; } .page { max-width:none; padding:10mm; } }
+    @media (max-width:600px) { .two-col { grid-template-columns:1fr; } }
+  </style>
+</head>
+<body>
+<div class="page">
+
+<h1>☁️ 云部署与 CI/CD 流水线 · 速查表</h1>
+<p class="small" style="margin-top:-4px;">完整课程：<a href="../lessons/0014-cloud-deployment-cicd.html">第 14 课：云部署与 CI/CD 流水线</a></p>
+
+<h2>一、云服务器推荐配置</h2>
+<table>
+  <tr><th>配置</th><th>CPU</th><th>内存</th><th>带宽</th><th>系统盘</th><th>月费</th><th>适用</th></tr>
+  <tr><td>入门</td><td>2C</td><td>4G</td><td>3Mbps</td><td>40G</td><td>¥80-120</td><td>个人/Demo</td></tr>
+  <tr><td><strong>推荐</strong></td><td><strong>2C</strong></td><td><strong>8G</strong></td><td><strong>5Mbps</strong></td><td><strong>40G</strong></td><td><strong>¥150-200</strong></td><td><strong>小团队</strong></td></tr>
+  <tr><td>进阶</td><td>4C</td><td>16G</td><td>10Mbps</td><td>80G</td><td>¥400-600</td><td>正式生产</td></tr>
+</table>
+
+<h2>二、安全组必须放行的端口</h2>
+<table>
+  <tr><th>端口</th><th>协议</th><th>来源</th><th>用途</th></tr>
+  <tr><td>22</td><td>TCP</td><td>你的 IP（或 0.0.0.0）</td><td>SSH — 建议限制来源 IP</td></tr>
+  <tr><td>80</td><td>TCP</td><td>0.0.0.0/0</td><td>HTTP（Let's Encrypt 验证 + 重定向）</td></tr>
+  <tr><td>443</td><td>TCP</td><td>0.0.0.0/0</td><td>HTTPS（生产流量入口）</td></tr>
+</table>
+<p class="bad"><strong>禁止</strong>：8000（RAG API）/ 6379（Redis）等内部端口对公网开放。</p>
+
+<h2>三、服务器初始化命令速查</h2>
+<pre># Docker 安装（阿里云镜像）
+curl -fsSL https://get.docker.com | bash -s docker --mirror Aliyun
+
+# Docker 镜像加速配置
+sudo tee /etc/docker/daemon.json <<'EOF'
+{"registry-mirrors":["https://&lt;你的地址&gt;.mirror.aliyuncs.com"],
+ "log-driver":"json-file",
+ "log-opts":{"max-size":"10m","max-file":"3"},
+ "exec-opts":["native.cgroupdriver=systemd"]}
+EOF
+sudo systemctl daemon-reload && sudo systemctl restart docker
+
+# UFW 防火墙
+ufw allow 22/tcp && ufw allow 80/tcp && ufw allow 443/tcp && ufw --force enable
+
+# 系统优化
+echo "vm.swappiness=10" >> /etc/sysctl.conf && sysctl -p
+timedatectl set-timezone Asia/Shanghai</pre>
+
+<h2>四、Let's Encrypt SSL 证书</h2>
+<pre># 安装 Certbot
+sudo apt install -y certbot python3-certbot-nginx
+
+# 申请证书（需先确保 80 端口可访问）
+sudo certbot --nginx -d your-domain.com
+
+# 自动续期（systemd timer）
+sudo tee /etc/systemd/system/certbot-renew.service <<'SVC'
+[Unit]
+Description=Certbot Renewal
+After=network-online.target
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/certbot renew --post-hook "docker exec rag-nginx nginx -s reload"
+SVC
+
+sudo tee /etc/systemd/system/certbot-renew.timer <<'TMR'
+[Unit]
+Description=Certbot renewal twice daily
+[Timer]
+OnCalendar=*-*-* 00,12:00:00
+RandomizedDelaySec=1h
+Persistent=true
+[Install]
+WantedBy=timers.target
+TMR
+sudo systemctl enable --now certbot-renew.timer
+
+# 测试续期
+sudo certbot renew --dry-run</pre>
+
+<h2>五、Nginx HTTPS 关键配置片段</h2>
+<pre># HTTP → HTTPS 重定向
+server {
+    listen 80;
+    server_name your-domain.com;
+    return 301 https://$server_name$request_uri;
+}
+
+# HTTPS 服务
+server {
+    listen 443 ssl http2;
+    server_name your-domain.com;
+
+    ssl_certificate /etc/letsencrypt/live/your-domain.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/your-domain.com/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_session_cache shared:SSL:10m;
+
+    add_header Strict-Transport-Security "max-age=63072000" always;
+    add_header X-Content-Type-Options nosniff;
+    add_header X-Frame-Options DENY;
+
+    client_max_body_size 50m;
+
+    location /api/ {
+        rewrite ^/api(/.*)$ $1 break;
+        proxy_pass http://rag_api;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 120s;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+    }
+
+    # 生产环境关闭 API 文档
+    location /docs { deny all; return 404; }
+    location /redoc { deny all; return 404; }
+}</pre>
+
+<h2>六、GitHub Actions CI/CD 核心 Workflow</h2>
+<pre># .github/workflows/deploy.yml
+name: Deploy RAG Service
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  REGISTRY: registry.cn-hangzhou.aliyuncs.com
+  NAMESPACE: your-ns
+  IMAGE_NAME: rag-service
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12', cache: 'pip' }
+      - run: pip install -r requirements.txt pytest
+      - run: pytest tests/ -v --timeout=30
+        env: { OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }} }
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.ACR_USERNAME }}
+          password: ${{ secrets.ACR_PASSWORD }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: . ; file: ./Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.NAMESPACE }}/${{ env.IMAGE_NAME }}:latest
+            ${{ env.REGISTRY }}/${{ env.NAMESPACE }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    steps:
+      - uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USERNAME }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          script: |
+            cd /opt/rag-service
+            git pull origin main
+            docker login ${{ env.REGISTRY }} \
+              -u ${{ secrets.ACR_USERNAME }} \
+              -p ${{ secrets.ACR_PASSWORD }}
+            docker pull ${{ env.REGISTRY }}/${{ env.NAMESPACE }}/${{ env.IMAGE_NAME }}:latest
+            export IMAGE_TAG=${{ env.REGISTRY }}/${{ env.NAMESPACE }}/${{ env.IMAGE_NAME }}:latest
+            docker compose down --remove-orphans || true
+            docker compose up -d
+            sleep 15
+            curl -f http://localhost:8000/health || exit 1</pre>
+
+<h2>七、GitHub Secrets 清单</h2>
+<table>
+  <tr><th>Secret 名</th><th>说明</th></tr>
+  <tr><td><code>SERVER_HOST</code></td><td>服务器公网 IP</td></tr>
+  <tr><td><code>SERVER_USERNAME</code></td><td>SSH 用户名（通常 root）</td></tr>
+  <tr><td><code>SERVER_SSH_KEY</code></td><td>SSH 私钥（cat ~/.ssh/id_ed25519）</td></tr>
+  <tr><td><code>ACR_USERNAME</code></td><td>阿里云账号邮箱</td></tr>
+  <tr><td><code>ACR_PASSWORD</code></td><td>ACR 固定密码</td></tr>
+  <tr><td><code>OPENAI_API_KEY</code></td><td>用于 CI 测试的 API Key</td></tr>
+</table>
+
+<h2>八、Docker Compose 适配云部署</h2>
+<pre># docker-compose.yml 关键变化
+services:
+  rag-api:
+    image: ${IMAGE_TAG:-rag-service:latest}  # 支持镜像仓库模式
+    build:
+      context: .
+      dockerfile: Dockerfile
+
+  nginx:
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - /etc/letsencrypt:/etc/letsencrypt:ro   # 挂载 SSL 证书
+
+volumes:
+  chroma_data:  # 命名卷，持久化数据
+    driver: local</pre>
+
+<h2>九、蓝绿部署核心逻辑</h2>
+<pre># 核心思想
+# 同时运行两套 RAG API（blue + green）
+# Nginx 指向当前活跃环境
+# 部署时更新非活跃环境 → 验证 → 切换 Nginx
+
+# 关键切换命令
+sed -i 's|proxy_pass http://rag_api_blue|proxy_pass http://rag_api_green|' nginx.conf
+docker exec rag-nginx nginx -s reload
+
+# 快速回滚：把 proxy_pass 改回蓝环境，reload Nginx</pre>
+
+<h2>十、上线安全检查清单</h2>
+<ul>
+  <li>☐ <strong>安全组</strong>：只放行 22/80/443，8000/6379 不暴露</li>
+  <li>☐ <strong>SSH</strong>：禁用密码登录（<code>PasswordAuthentication no</code>）</li>
+  <li>☐ <strong>HTTPS</strong>：HTTP → HTTPS 强制 301 重定向</li>
+  <li>☐ <strong>API 文档</strong>：生产环境关闭 /docs /redoc</li>
+  <li>☐ <strong>.env 密钥</strong>：不提交到 Git，.gitignore 中包含 .env</li>
+  <li>☐ <strong>Docker 日志</strong>：daemon.json 配置了 max-size / max-file</li>
+  <li>☐ <strong>SSL 续期</strong>：systemd timer 已启用，<code>certbot renew --dry-run</code> 成功</li>
+  <li>☐ <strong>备份</strong>：Chroma 数据已持久化，数据目录已备份</li>
+  <li>☐ <strong>自愈</strong>：测试 docker stop 后自动重启，测试 sudo reboot 后服务恢复</li>
+  <li>☐ <strong>回滚</strong>：知道如何回滚到上一个版本</li>
+</ul>
+
+<h2>十一、常见故障速查</h2>
+<table>
+  <tr><th>现象</th><th>可能原因</th><th>排查命令/方案</th></tr>
+  <tr><td>Certbot 验证失败</td><td>DNS 未生效 / 80 端口不通</td><td><code>dig your-domain.com</code>；<code>curl -I http://your-domain.com</code></td></tr>
+  <tr><td>GitHub Actions SSH 失败</td><td>密钥不对 / 安全组屏蔽</td><td>本地 <code>ssh -i</code> 测试；检查 22 端口安全组规则</td></tr>
+  <tr><td>容器 Exited(137)</td><td>OOM（内存不足）</td><td><code>dmesg | grep oom</code>；<code>free -h</code>；<code>docker stats</code></td></tr>
+  <tr><td>/ask 返回 502</td><td>Nginx proxy_read_timeout 过短</td><td>增大到 120s+；检查 LLM 响应时间</td></tr>
+  <tr><td>docker login ACR 失败</td><td>密码/用户名不对</td><td>使用阿里云账号邮箱 + ACR 固定密码</td></tr>
+  <tr><td>x86 服务器跑 ARM 镜像</td><td>CPU 架构不兼容</td><td>指定 <code>--platform linux/amd64</code> 或在服务器构建</td></tr>
+</table>
+
+<h2>十二、常用操作命令</h2>
+<table>
+  <tr><th>操作</th><th>命令</th></tr>
+  <tr><td>SSH 连接</td><td><code>ssh root@&lt;IP&gt;</code></td></tr>
+  <tr><td>查看服务器资源</td><td><code>free -h &amp;&amp; df -h &amp;&amp; uptime</code></td></tr>
+  <tr><td>查看 Docker 状态</td><td><code>docker compose ps</code></td></tr>
+  <tr><td>查看实时日志</td><td><code>docker compose logs -f rag-api</code></td></tr>
+  <tr><td>重新部署</td><td><code>docker compose down && docker compose up -d</code></td></tr>
+  <tr><td>查看 SSL 证书</td><td><code>sudo certbot certificates</code></td></tr>
+  <tr><td>测试 SSL 续期</td><td><code>sudo certbot renew --dry-run</code></td></tr>
+  <tr><td>定时器状态</td><td><code>systemctl status certbot-renew.timer</code></td></tr>
+  <tr><td>Nginx reload</td><td><code>docker exec rag-nginx nginx -s reload</code></td></tr>
+  <tr><td>跨平台构建（Mac→x86）</td><td><code>docker buildx build --platform linux/amd64 ...</code></td></tr>
+</table>
+
+</div>
+</body>
+</html>

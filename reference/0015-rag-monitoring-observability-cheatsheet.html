@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>RAG 监控与可观测性速查表</title>
+  <style>
+    :root { --ink:#172033; --muted:#667085; --line:#d7dde8; --accent:#0f766e; --good:#116329; --bad:#a10e25; --bg:#fff; }
+    * { box-sizing:border-box; }
+    body { margin:0; font:14px/1.6 ui-sans-serif,system-ui,-apple-system,Segoe UI,sans-serif; color:var(--ink); background:var(--bg); }
+    main { max-width:1000px; margin:0 auto; padding:28px 20px 50px; }
+    h1 { font-size:28px; margin:0 0 4px; }
+    .sub { color:var(--muted); font-size:15px; margin-bottom:18px; }
+    h2 { font-size:18px; margin:22px 0 8px; padding-bottom:4px; border-bottom:2px solid var(--accent); }
+    h3 { font-size:15px; margin:14px 0 4px; color:var(--accent); }
+    .grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; margin:8px 0; }
+    .card { border:1px solid var(--line); border-radius:6px; padding:10px 12px; break-inside:avoid; }
+    .card h4 { margin:0 0 4px; font-size:13px; }
+    .card p, .card code { font-size:12px; margin:2px 0; }
+    code { background:#eef6f5; padding:1px 4px; border-radius:3px; font-size:0.92em; font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; }
+    pre { background:#f6f8fa; border:1px solid var(--line); border-radius:6px; padding:10px; font-size:12px; line-height:1.5; overflow:auto; }
+    table { border-collapse:collapse; width:100%; margin:8px 0; font-size:13px; }
+    th, td { border:1px solid var(--line); padding:4px 8px; text-align:left; }
+    th { background:#f6f8fa; font-weight:700; }
+    .tag { display:inline-block; background:var(--accent); color:#fff; border-radius:3px; padding:1px 6px; font-size:11px; font-weight:700; }
+    .tag.metrics { background:#7c3aed; }
+    .tag.trace { background:#0891b2; }
+    .tag.log { background:#b45309; }
+    .tag.alert { background:#a10e25; }
+    .tag.infra { background:#1e40af; }
+    .col-3 { display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px; }
+    hr { border:none; border-top:1px solid var(--line); margin:16px 0; }
+    @media print { body { font-size:12px; } main { padding:15mm 20mm; } .grid, .col-3 { break-inside:avoid; } }
+  </style>
+</head>
+<body>
+<main>
+  <h1>📊 RAG 系统监控与可观测性速查表</h1>
+  <p class="sub">Prometheus + Grafana + Langfuse + Loki + Alertmanager — L15 核心知识点一页通</p>
+
+  <h2>一、可观测性三层模型</h2>
+  <table>
+    <tr><th>层次</th><th>监控内容</th><th>工具</th><th>典型问题</th></tr>
+    <tr><td>🖥️ 基础设施</td><td>CPU / 内存 / 磁盘 / 网络</td><td>Node Exporter, cAdvisor</td><td>CPU 90%, 磁盘将满, OOM</td></tr>
+    <tr><td>📊 应用层</td><td>QPS / P50/P95/P99 / 错误率</td><td>Prometheus Client, Grafana</td><td>接口变慢, 错误率飙升</td></tr>
+    <tr><td>🤖 LLM 层</td><td>Token 消耗 / 输入输出 / 质量评分</td><td>Langfuse, RAGAS</td><td>回答变差, 费用暴涨, 检索不准</td></tr>
+  </table>
+
+  <h2>二、Prometheus 指标类型</h2>
+  <table>
+    <tr><th>类型</th><th>语义</th><th>RAG 示例</th><th>PromQL 模式</th></tr>
+    <tr><td><strong>Counter</strong></td><td>只增不减</td><td>请求总数、错误总数、token 总数</td><td><code>rate(rag_requests_total[5m])</code></td></tr>
+    <tr><td><strong>Gauge</strong></td><td>可增可减</td><td>文档数、活跃连接数、检索平均分</td><td><code>rag_retrieval_score</code></td></tr>
+    <tr><td><strong>Histogram</strong></td><td>分布统计</td><td>延迟分布、检索 chunk 数分布</td><td><code>histogram_quantile(0.95, rate(...))</code></td></tr>
+  </table>
+
+  <h2>三、核心 PromQL 查询</h2>
+  <table>
+    <tr><th>查询目标</th><th>PromQL</th></tr>
+    <tr><td>QPS（每秒请求数）</td><td><code>rate(rag_requests_total{endpoint="/ask"}[5m])</code></td></tr>
+    <tr><td>P95 延迟（毫秒）</td><td><code>histogram_quantile(0.95, rate(rag_request_duration_ms_bucket{endpoint="/ask"}[5m]))</code></td></tr>
+    <tr><td>错误率</td><td><code>sum(rate(rag_requests_total{status=~"5.."}[5m])) / sum(rate(rag_requests_total[5m]))</code></td></tr>
+    <tr><td>Token 消耗速率</td><td><code>rate(rag_tokens_total{token_type="total"}[1h])</code></td></tr>
+    <tr><td>服务器 CPU 使用率</td><td><code>100 - avg by(instance) (rate(node_cpu_seconds_total{mode="idle"}[2m])) * 100</code></td></tr>
+    <tr><td>磁盘剩余比例</td><td><code>node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"}</code></td></tr>
+    <tr><td>容器内存用量</td><td><code>container_memory_usage_bytes{container_label_com_docker_compose_service="rag-api"}</code></td></tr>
+  </table>
+
+  <h2>四、RAG 自定义指标命名规范</h2>
+  <pre><code>rag_requests_total{endpoint, method, status}    # Counter — 请求数
+rag_request_duration_ms{endpoint}                # Histogram — 延迟(ms)
+rag_errors_total{endpoint, error_type}           # Counter — 错误数
+rag_retrieval_chunks{query_type}                 # Histogram — 检索chunk数
+rag_retrieval_score{query_type}                  # Gauge — 检索平均分
+rag_tokens_total{model, token_type}              # Counter — token 消耗
+rag_refusals_total{reason}                       # Counter — 拒答次数
+rag_knowledge_docs                               # Gauge — 知识库文档数
+rag_llm_duration_ms{provider, model}             # Histogram — LLM调用延迟(ms)
+# 命名规范：namespace_metric_unit{labels}
+# 类型后缀：Counter→_total, Histogram→_bucket/_count/_sum</code></pre>
+
+  <h2>五、FastAPI 指标埋点代码片段</h2>
+
+  <div class="grid">
+    <div class="card">
+      <h4>📦 metrics.py — 指标定义</h4>
+      <pre><code>from prometheus_client import Counter, Histogram, Gauge
+
+rag_requests_total = Counter(
+    "rag_requests_total", "总请求数",
+    labelnames=["endpoint", "method", "status"])
+
+rag_request_duration_ms = Histogram(
+    "rag_request_duration_ms", "延迟(ms)",
+    labelnames=["endpoint"],
+    buckets=[50,100,200,500,1000,2000,5000,10000,30000,60000])
+
+rag_tokens_total = Counter(
+    "rag_tokens_total", "token 消耗",
+    labelnames=["model", "token_type"])</code></pre>
+    </div>
+    <div class="card">
+      <h4>🔌 main.py — /metrics 端点 + 中间件</h4>
+      <pre><code>from .metrics import metrics_middleware, get_metrics
+
+# 注册中间件
+app.middleware("http")(metrics_middleware)
+
+# 注册 metrics 端点
+@app.get("/metrics")
+async def metrics():
+    from fastapi.responses import PlainTextResponse
+    return PlainTextResponse(content=get_metrics())</code></pre>
+    </div>
+    <div class="card">
+      <h4>📊 rag_pipeline.py — 埋点示例</h4>
+      <pre><code>rag_retrieval_chunks.labels(query_type="general").observe(len(results))
+rag_retrieval_score.labels(query_type="general").set(avg_score)
+rag_llm_duration_ms.labels(provider="openai", model="gpt-4o-mini").observe(llm_duration)
+rag_tokens_total.labels(model="gpt-4o-mini", token_type="total").inc(prompt_tokens + completion_tokens)
+rag_refusals_total.labels(reason="no_context").inc()</code></pre>
+    </div>
+  </div>
+
+  <h2>六、告警规则示例</h2>
+  <table>
+    <tr><th>告警名</th><th>表达式</th><th>严重级别</th></tr>
+    <tr><td>HighErrorRate</td><td><code>rate(5xx[5m]) / rate(total[5m]) > 0.05</code></td><td><span class="tag alert">critical</span></td></tr>
+    <tr><td>HighLatency</td><td><code>histogram_quantile(0.95, rate(/ask延迟[5m])) > 10000</code></td><td><span class="tag alert" style="background:#8b5e00;">warning</span></td></tr>
+    <tr><td>RetrievalQualityDegraded</td><td><code>rag_retrieval_score < 0.3</code></td><td><span class="tag alert" style="background:#8b5e00;">warning</span></td></tr>
+    <tr><td>TokenConsumptionSpike</td><td><code>rate(1h token总量) / rate(24h token总量) > 3</code></td><td><span class="tag" style="background:#0891b2;">info</span></td></tr>
+    <tr><td>HighCpuUsage</td><td><code>100 - avg(idle%) > 80</code></td><td><span class="tag alert" style="background:#8b5e00;">warning</span></td></tr>
+    <tr><td>DiskSpaceLow</td><td><code>avail_bytes / size_bytes < 0.1</code></td><td><span class="tag alert">critical</span></td></tr>
+  </table>
+
+  <h2>七、Langfuse 核心 API</h2>
+  <table>
+    <tr><th>方法</th><th>用途</th><th>RAG 场景</th></tr>
+    <tr><td><code>langfuse.trace(name, input, session_id)</code></td><td>创建一个 Trace</td><td>每次 /ask 请求</td></tr>
+    <tr><td><code>trace.span(name, input)</code></td><td>创建一个 Span</td><td>检索阶段、指代消解阶段</td></tr>
+    <tr><td><code>trace.generation(name, model, input, output, usage)</code></td><td>记录 LLM 调用</td><td>LLM chat completion</td></tr>
+    <tr><td><code>trace.score(name, value)</code></td><td>添加评分</td><td>Faithfulness 评分</td></tr>
+  </table>
+
+  <h2>八、LogQL 日志查询</h2>
+  <table>
+    <tr><th>查询</th><th>说明</th></tr>
+    <tr><td><code>{service="rag-api"}</code></td><td>查看所有 RAG API 日志</td></tr>
+    <tr><td><code>{service="rag-api"} |= "ERROR"</code></td><td>只查看错误日志</td></tr>
+    <tr><td><code>{service="rag-api"} |= "latency_ms" | json | latency_ms > 5000</code></td><td>查看延迟 > 5s 的请求</td></tr>
+    <tr><td><code>rate({service="rag-api"} |= "ERROR" [5m])</code></td><td>错误率（次/秒）</td></tr>
+  </table>
+
+  <h2>九、质量巡检脚本关键逻辑</h2>
+  <pre><code># scripts/quality_check.py 核心检查项：
+# 1. 检索平均分数（基线对比，下降超 20% 告警）
+# 2. Recall@K（Golden Test Set 关键词命中率）
+# 3. Embedding 一致性（同一文本两次 embedding 余弦相似度）
+# 4. 综合状态：全部 ok → healthy，否则 → degraded
+
+# 触发方式：
+# 方式 A：服务器 cron，每天凌晨 2 点
+# 方式 B：GitHub Actions 定时流水线（推荐）
+# 失败时 exit code = 1，可配合告警系统发送通知</code></pre>
+
+  <h2>十、Docker Compose 监控服务速览</h2>
+  <table>
+    <tr><th>服务</th><th>镜像</th><th>端口</th><th>关键挂载</th></tr>
+    <tr><td>prometheus</td><td>prom/prometheus</td><td>9090</td><td>prometheus.yml, alert-rules.yml, data/prometheus</td></tr>
+    <tr><td>node-exporter</td><td>prom/node-exporter</td><td>9100</td><td>/proc, /sys, /rootfs (只读)</td></tr>
+    <tr><td>cadvisor</td><td>gcr.io/cadvisor/cadvisor</td><td>8080</td><td>/var/run/docker.sock, /sys (privileged)</td></tr>
+    <tr><td>grafana</td><td>grafana/grafana</td><td>3001</td><td>datasources/, dashboards/ (provisioning)</td></tr>
+    <tr><td>loki</td><td>grafana/loki</td><td>3100</td><td>loki-config.yml, data/loki</td></tr>
+    <tr><td>promtail</td><td>grafana/promtail</td><td>9080</td><td>/var/run/docker.sock, promtail-config.yml</td></tr>
+    <tr><td>alertmanager</td><td>prom/alertmanager</td><td>9093</td><td>alertmanager.yml, data/alertmanager</td></tr>
+    <tr><td>langfuse-server</td><td>ghcr.io/langfuse/langfuse</td><td>3000</td><td>DATABASE_URL → PostgreSQL</td></tr>
+  </table>
+
+  <h2>十一、常见问题排查</h2>
+  <table>
+    <tr><th>症状</th><th>可能原因</th><th>排查命令</th></tr>
+    <tr><td>/metrics 404</td><td>路由未注册</td><td><code>docker compose logs rag-api | grep "metrics"</code></td></tr>
+    <tr><td>Grafana 数据源不可达</td><td>网络/Docker 服务名错误</td><td><code>docker compose exec grafana wget -qO- http://prometheus:9090</code></td></tr>
+    <tr><td>Loki 无日志</td><td>Promtail 无法读取 Docker Socket</td><td><code>docker compose logs promtail</code></td></tr>
+    <tr><td>Langfuse 白屏</td><td>DB schema 迁移失败</td><td><code>docker compose logs langfuse-server | grep "migration"</code></td></tr>
+    <tr><td>告警未送达</td><td>Webhook URL 配置错误</td><td><code>curl -X POST $WEBHOOK_URL -d '{"msg":"test"}'</code></td></tr>
+  </table>
+
+  <hr>
+  <p class="sub" style="text-align:center;">L15 — 系统监控与可观测性 · 课程速查表 · 2026-06-20</p>
+</main>
+</body>
+</html>

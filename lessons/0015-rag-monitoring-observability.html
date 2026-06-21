@@ -1,0 +1,2450 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>第 15 课：系统监控与可观测性 —— 让你的 RAG 服务不再"黑盒"运行</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink:#172033; --muted:#667085; --line:#d7dde8; --accent:#0f766e;
+      --accent2:#8b5e00; --good:#116329; --bad:#a10e25; --bg:#fbfcfe; --panel:#fff;
+    }
+    * { box-sizing: border-box; }
+    body { margin:0; font-family: ui-serif, Georgia, "Noto Serif SC", serif; color:var(--ink); background:var(--bg); line-height:1.7; }
+    main { max-width: 960px; margin: 0 auto; padding: 42px 22px 70px; }
+    header { margin-bottom: 30px; }
+    .kicker { font: 700 13px/1.2 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color:var(--accent); text-transform: uppercase; letter-spacing: .08em; }
+    h1 { font-size: clamp(32px, 5vw, 54px); line-height:1.08; margin: 10px 0 12px; letter-spacing:0; }
+    h2 { font-size: 23px; margin: 34px 0 12px; padding-bottom: 6px; border-bottom:1px solid var(--line); }
+    h3 { font-size: 18px; margin: 20px 0 8px; }
+    h4 { font-size: 16px; margin: 14px 0 6px; }
+    p { margin: 0 0 14px; }
+    a { color:#0b5cad; text-decoration-thickness:1px; text-underline-offset:3px; }
+    .lede { color:var(--muted); max-width:760px; font-size:18px; }
+    .panel { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:18px; margin:16px 0; }
+    .panel.good { border-left:4px solid var(--good); }
+    .panel.warn { border-left:4px solid var(--accent2); }
+    .panel.bad { border-left:4px solid var(--bad); }
+    .panel.info { border-left:4px solid var(--accent); }
+    code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    code { background:#eef6f5; padding:2px 5px; border-radius:4px; font-size:0.92em; }
+    pre { overflow:auto; background:#f6f8fa; color:var(--ink); border:1px solid var(--line); border-radius:8px; padding:16px; font-size:14px; line-height:1.55; }
+    .small { color:var(--muted); font-size:14px; }
+    .tag { display:inline-block; background:var(--accent); color:#fff; border-radius:4px; padding:2px 8px; font-size:12px; font-weight:700; letter-spacing:.03em; font-family:ui-sans-serif,system-ui; }
+    .tag.metrics { background:#7c3aed; }
+    .tag.graf { background:#e11d48; }
+    .tag.trace { background:#0891b2; }
+    .tag.log { background:#b45309; }
+    .tag.alert { background:#a10e25; }
+    .tag.infra { background:#1e40af; }
+    .tag.llm { background:#6d28d9; }
+    .tag.upgrade { background:#0f766e; }
+    .quiz { display:grid; gap:10px; margin-top:12px; }
+    button { border:1px solid var(--line); background:#fff; border-radius:8px; padding:11px 13px; text-align:left; font:600 15px/1.35 ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif; color:var(--ink); cursor:pointer; }
+    button:hover { border-color:var(--accent); }
+    button.selected { border-color:var(--accent); background:#eef6f5; }
+    button.correct { border-color:var(--good); background:#edf8ef; color:var(--good); }
+    button.wrong { border-color:var(--bad); background:#fff0f2; color:var(--bad); }
+    .feedback { min-height:26px; font-weight:700; margin-top:8px; }
+    .task { border-left:4px solid var(--accent2); padding-left:14px; margin:20px 0; }
+    table { border-collapse:collapse; width:100%; margin:14px 0; }
+    th, td { border:1px solid var(--line); padding:8px 12px; text-align:left; font-size:15px; }
+    th { background:#f6f8fa; font-weight:700; }
+    ul, ol { padding-left:22px; }
+    .combo { display:grid; grid-template-columns: 1fr 1fr; gap:14px; margin:16px 0; }
+    .flow { display:flex; align-items:center; gap:6px; flex-wrap:wrap; justify-content:center; margin:16px 0; }
+    .flow-box { border:1px solid var(--line); border-radius:6px; padding:8px 14px; background:var(--panel); font-size:14px; text-align:center; }
+    .flow-arrow { font-size:20px; color:var(--muted); }
+    .diagram { text-align:center; margin:20px 0; padding:24px; background:#fafbfc; border:1px solid var(--line); border-radius:12px; }
+    .diagram .arrow { color:var(--muted); font-size:24px; margin:0 4px; }
+    .diagram .box { display:inline-block; border:2px solid var(--accent); border-radius:8px; padding:10px 18px; margin:4px; font-weight:700; }
+    .diagram .box.warn { border-color:var(--accent2); }
+    .diagram .box.good { border-color:var(--good); }
+    .diagram .box.muted { border-color:var(--muted); color:var(--muted); }
+    .diagram .box.svc { border-color:#4f46e5; }
+    .diagram .box.data { border-color:#b45309; }
+    .diagram .box.mon { border-color:#7c3aed; }
+    .diagram .box.graf { border-color:#e11d48; }
+    .diagram .box.trace { border-color:#0891b2; }
+    .diagram .box.log { border-color:#b45309; }
+    .diagram .box.alert { border-color:#a10e25; }
+    .file-tree { background:#fafbfc; border:1px solid var(--line); border-radius:8px; padding:14px 18px; margin:12px 0; font-size:14px; font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; line-height:1.6; }
+    .file-tree .dir { color:var(--muted); }
+    .file-tree .hl { background:#fff8e1; }
+    .arch { text-align:center; margin:20px 0; padding:18px; background:#fafbfc; border:1px solid var(--line); border-radius:12px; font-size:14px; line-height:2; }
+    .collapse { max-height:0; overflow:hidden; transition:max-height 0.3s ease; }
+    .collapse.open { max-height:2000px; }
+    .tog-btn { border:1px solid var(--accent); background:#fff; color:var(--accent); border-radius:6px; padding:4px 12px; font:600 13px ui-sans-serif; cursor:pointer; }
+    .tog-btn:hover { background:var(--accent); color:#fff; }
+    .three-col { display:grid; grid-template-columns: 1fr 1fr 1fr; gap:12px; margin:16px 0; }
+    @media (max-width: 640px) { .combo, .three-col { grid-template-columns: 1fr; } }
+    @media print { body { background:white; } main { max-width:none; padding:20mm; } .panel { break-inside: avoid; } button { border-color:#aaa; } .diagram { break-inside: avoid; } }
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <div class="kicker">Lesson 0015 — 模块三 · 生产化部署与运维</div>
+    <h1>系统监控与可观测性：让你的 RAG 服务不再"黑盒"运行</h1>
+    <p class="lede">本课目标：为 L13-L14 部署的 RAG 服务搭建完整的可观测性体系——三层监控（基础设施/应用/LLM）、Prometheus + Grafana 指标采集和可视化、Langfuse 调用链追踪、Loki 日志聚合、告警规则配置，以及检索质量退化自动检测。问题发生时，5 分钟内定位到具体环节。</p>
+  </header>
+
+  <!-- ===================== 能力预告 ===================== -->
+  <section>
+    <h2>你今天要获得的能力</h2>
+    <p>学完本课，你将拥有：</p>
+    <ul>
+      <li>✅ <strong>三层可观测体系的完整认知</strong>：基础设施层（CPU/内存/磁盘）、应用层（QPS/延迟/错误率）、LLM 层（token 消耗/响应时间/质量指标）——分层采集、分层告警</li>
+      <li>✅ <strong>Prometheus + 自定义 RAG 指标</strong>：通过 <code>prometheus_client</code> 在 FastAPI 中埋点，暴露 <code>/metrics</code> 端点，采集请求量、延迟分布、检索结果数、错误率</li>
+      <li>✅ <strong>Grafana 仪表盘</strong>：搭建 RAG 专属可视化面板，从"全局概览"到"单请求追踪"层层下钻</li>
+      <li>✅ <strong>Langfuse LLM 调用链追踪</strong>：查看每次 LLM 调用的完整上下文——输入 prompt、输出回答、token 用量、延迟——并关联到 RAG 管线的检索和生成环节</li>
+      <li>✅ <strong>Loki + Promtail 日志聚合</strong>：采集 Docker 容器的 JSON 结构化日志，在 Grafana 中跨服务搜索和关联</li>
+      <li>✅ <strong>告警规则</strong>：配置 Prometheus Alertmanager，当错误率飙升/P95 延迟超标/检索质量退化时，通过飞书/钉钉/企微通知</li>
+      <li>✅ <strong>检索质量退化自动检测</strong>：定时评估检索结果的 score 分布，对比基线，质量下降时自动告警</li>
+    </ul>
+    <p class="small">前置课程：<a href="0014-cloud-deployment-cicd.html">第 14 课：云部署与 CI/CD 流水线</a>（本课的监控体系部署在云端）、<a href="0013-docker-compose-deployment.html">第 13 课：Docker Compose 容器化部署</a>（本课在其代码基础上新增监控服务编排）。速查表：<a href="../reference/0015-rag-monitoring-observability-cheatsheet.html">监控与可观测性速查表</a>。</p>
+  </section>
+
+  <!-- ===================== 场景导入 ===================== -->
+  <section>
+    <h2>场景导入：从"能跑"到"出了问题能快速定位"</h2>
+
+    <div class="panel good">
+      <p>到 L14 为止，你的 RAG 系统已经：</p>
+      <ul>
+        <li>✅ 在云服务器上跑着 Docker Compose 服务栈</li>
+        <li>✅ 通过 HTTPS 对外提供服务</li>
+        <li>✅ <code>git push</code> 就能自动部署</li>
+      </ul>
+    </div>
+
+    <p>但你的系统正在"黑盒"运行——你完全不知道里面发生了什么：</p>
+
+    <div class="panel warn">
+      <h3>😰 没有监控的日常</h3>
+      <ul>
+        <li><strong>用户说"好慢"</strong>——你只能登录服务器 <code>docker compose logs</code> 一条条翻</li>
+        <li><strong>凌晨 3 点服务器挂了</strong>——你还在睡觉，等早上才知道</li>
+        <li><strong>LLM API 突然超时</strong>——你发现时已经烧了几千块钱的超时重试费用</li>
+        <li><strong>检索质量下降了</strong>——用户投诉"最近回答总是不对"，但你没有任何数据验证</li>
+        <li><strong>老板问"我们系统每天处理多少请求？"</strong>——你答不上来</li>
+      </ul>
+      <p>这些问题不是"有监控更好"——而是<strong>没有监控，系统等于在裸奔</strong>。</p>
+    </div>
+
+    <p>本课的目标就是结束这种"裸奔"状态。来看看最终的样子：</p>
+
+    <div class="diagram">
+      <div class="box svc">Nginx<br>网关</div>
+      <div class="arrow">→</div>
+      <div class="box" style="border-color:#0f766e;">RAG API<br>FastAPI</div>
+      <div class="arrow">→</div>
+      <div class="box data">Chroma</div>
+      <div class="arrow" style="display:block; margin-top:6px;">→</div>
+      <div class="box data">Redis</div>
+      <br><br>
+      <span class="box mon">Prometheus<br>指标采集</span>
+      <div class="arrow">→</div>
+      <span class="box graf">Grafana<br>仪表盘</span>
+      <br>
+      <span class="box trace">Langfuse<br>LLM 追踪</span>&nbsp;&nbsp;
+      <span class="box log">Loki<br>日志聚合</span>&nbsp;&nbsp;
+      <span class="box alert">Alertmanager<br>告警通知</span>
+      <br>
+      <span class="box muted">飞书 / 钉钉 /<br>企业微信</span>
+    </div>
+  </section>
+
+  <!-- ===================== 第一部分：认识可观测性三层体系 ===================== -->
+  <section>
+    <h2>第一部分：认识可观测性三层体系</h2>
+
+    <p>在动手之前，先理解一个重要的架构思想——<strong>可观测性的三个层次</strong>。<br>
+    一个 RAG 系统的请求路径很长（用户 → Nginx → FastAPI → LLM API → 向量库 → ...），每个环节都可能是瓶颈。你需要在三个层次同时看到发生了什么，才能快速定位问题。</p>
+
+    <h3>1.1 三层可观测模型</h3>
+
+    <table>
+      <tr><th>层次</th><th>监控什么</th><th>工具</th><th>典型问题</th></tr>
+      <tr>
+        <td><strong>🖥️ 基础设施层</strong><br><span class="small">Infrastructure</span></td>
+        <td>CPU、内存、磁盘、网络、Docker 容器资源</td>
+        <td>Node Exporter<br>cAdvisor<br>Prometheus</td>
+        <td>"CPU 飙到 90% 了"<br>"磁盘要满了"<br>"容器 OOM 被杀"</td>
+      </tr>
+      <tr>
+        <td><strong>📊 应用层</strong><br><span class="small">Application</span></td>
+        <td>QPS、延迟分布（P50/P95/P99）、错误率、业务指标</td>
+        <td>Prometheus Client<br>Grafana<br>Loki</td>
+        <td>"接口变慢了"<br>"错误率飙升"<br>"某个端点成功率低"</td>
+      </tr>
+      <tr>
+        <td><strong>🤖 LLM 层</strong><br><span class="small">LLM / AI</span></td>
+        <td>token 消耗、每次调用的输入/输出、检索质量、Faithfulness 评分</td>
+        <td>Langfuse<br>RAGAS<br>自定义追踪</td>
+        <td>"这次回答为什么这么差？"<br>"LLM 调用费突然涨了"<br>"检索不到相关文档"</td>
+      </tr>
+    </table>
+
+    <p>这三个层次<strong>缺一不可</strong>，并且需要能互相关联——当应用层延迟变高时，你应该能一眼看出是因为基础设施层 CPU 满载了，还是 LLM 层 token 量变大了。</p>
+
+    <h3>1.2 可观测性的三大支柱</h3>
+
+    <p>可观测性领域有三个核心数据类型，称为"三大支柱"：</p>
+
+    <table>
+      <tr><th>支柱</th><th>是什么</th><th>用途</th><th>工具</th></tr>
+      <tr><td><strong>📈 指标</strong> (Metrics)</td><td>数值化的聚合数据，如请求数、延迟、错误率</td><td>趋势分析、告警触发、容量规划</td><td>Prometheus</td></tr>
+      <tr><td><strong>📝 日志</strong> (Logs)</td><td>离散的事件记录，每条带时间戳和上下文</td><td>问题排查、详细调试、审计追踪</td><td>Loki / ELK</td></tr>
+      <tr><td><strong>🔗 追踪</strong> (Traces)</td><td>一次请求经过多个服务的完整路径</td><td>分布式链路分析、瓶颈定位</td><td>Langfuse / Jaeger</td></tr>
+    </table>
+
+    <div class="panel info">
+      <h3>三大支柱必须协同工作</h3>
+      <p><strong>指标</strong>告诉你"有什么问题"，<strong>日志</strong>告诉你"具体发生了什么"，<strong>追踪</strong>告诉你"是哪个环节出的问题"。</p>
+      <p>举个例子：</p>
+      <ol>
+        <li><strong>指标告警</strong>：P95 延迟从 2s 飙到了 10s → 触发告警</li>
+        <li><strong>日志查看</strong>：搜索这个时间段的日志 → 发现大量 "LLM API timeout" 错误</li>
+        <li><strong>追踪下钻</strong>：追某次请求的完整链路 → 定位到 OpenAI API 调用阶段消耗了 15s</li>
+      </ol>
+      <p>三个步骤配合，5 分钟内就能定位到"OpenAI API 超时"这个根因。缺了任何一个，都要花几倍的时间。</p>
+    </div>
+
+    <h3>1.3 监控架构总览</h3>
+
+    <p>本课要搭建的完整监控架构：</p>
+
+    <div class="diagram">
+      <div class="box data">Node Exporter<br><span class="small">主机指标</span></div>
+      <div class="arrow">→</div>
+      <div class="box svc">cAdvisor<br><span class="small">容器指标</span></div>
+      <div class="arrow">→</div>
+      <div class="box mon">Prometheus<br><span class="small">指标存储</span></div>
+      <div class="arrow">→</div>
+      <div class="box graf">Grafana<br><span class="small">可视化</span></div>
+      <br>
+      <div class="box mon" style="border-color:#0f766e;">RAG API<br><span class="small">/metrics</span></div>
+      <div class="arrow" style="display:block; margin-top:4px;">→</div>
+      <div class="box alert">Alertmanager<br><span class="small">告警</span></div>
+      <div class="arrow">→</div>
+      <div class="box muted">飞书/钉钉/企微</div>
+      <br>
+      <div class="box log">Promtail<br><span class="small">日志采集</span></div>
+      <div class="arrow">→</div>
+      <div class="box log">Loki<br><span class="small">日志存储</span></div>
+      <br>
+      <div class="box trace">Langfuse<br><span class="small">LLM 追踪</span></div>
+    </div>
+  </section>
+
+  <!-- ===================== 第二部分：Prometheus 指标 ===================== -->
+  <section>
+    <h2>第二部分：应用层监控 —— 为 RAG API 添加 Prometheus 指标</h2>
+
+    <p>监控从<strong>应用层</strong>开始——因为这是最贴近业务的层次。我们先给 RAG API 加上自定义指标。</p>
+
+    <h3>2.1 什么是 Prometheus 指标？</h3>
+
+    <p><span class="tag metrics">Prometheus</span> 是一个开源的监控系统与时间序列数据库。它的工作模式是：</p>
+    <ol>
+      <li>你在代码中暴露一个 <code>/metrics</code> HTTP 端点</li>
+      <li>Prometheus 服务定期（默认 15s）来抓取这个端点</li>
+      <li>这些指标存储在 Prometheus 中，可通过 PromQL 查询——Grafana 从中读取数据绘制仪表盘</li>
+    </ol>
+
+    <p>Prometheus 定义了四种核心指标类型，在 RAG 监控中都会用到：</p>
+
+    <table>
+      <tr><th>指标类型</th><th>语义</th><th>RAG 示例</th></tr>
+      <tr><td><strong>Counter</strong>（计数器）</td><td>只增不减的累计值</td><td>总请求数、总错误数、总 token 消耗量</td></tr>
+      <tr><td><strong>Gauge</strong>（仪表盘）</td><td>可增可减的瞬态值</td><td>当前活跃连接数、知识库文档数、队列大小</td></tr>
+      <tr><td><strong>Histogram</strong>（直方图）</td><td>观测值的分布统计</td><td>请求延迟分布、检索结果数分布、chunk 大小分布</td></tr>
+      <tr><td><strong>Summary</strong>（摘要）</td><td>类似 Histogram，但计算分位数</td><td>P50/P95/P99 延迟、token 消耗分位数</td></tr>
+    </table>
+
+    <h3>2.2 创建 metrics.py —— RAG 指标定义</h3>
+
+    <p>在 <code>rag-service/app/metrics.py</code> 中定义 RAG 服务的所有自定义指标：</p>
+
+    <pre><code>"""
+app/metrics.py — RAG 服务的 Prometheus 指标定义
+
+使用 prometheus_client 库暴露自定义指标。
+这些指标在 /metrics 端点被 Prometheus 定期抓取。
+"""
+
+from prometheus_client import Counter, Histogram, Gauge, generate_latest, REGISTRY
+from typing import Awaitable, Callable
+from fastapi import Request, Response
+import time
+
+# ==================== 核心业务指标 ====================
+
+# 请求计数器（按端点和方法区分）
+rag_requests_total = Counter(
+    "rag_requests_total",
+    "RAG 服务总请求数",
+    labelnames=["endpoint", "method", "status"],
+)
+
+# 请求延迟直方图（毫秒）—— 关注 P50/P95/P99
+rag_request_duration_ms = Histogram(
+    "rag_request_duration_ms",
+    "RAG 请求延迟（毫秒）",
+    labelnames=["endpoint"],
+    buckets=[50, 100, 200, 500, 1000, 2000, 5000, 10000, 30000, 60000],
+)
+
+# 错误计数器（按错误类型区分）
+rag_errors_total = Counter(
+    "rag_errors_total",
+    "RAG 服务错误总数",
+    labelnames=["endpoint", "error_type"],
+)
+
+# ==================== RAG 专有指标 ====================
+
+# 检索结果数分布（每次检索返回了多少条结果）
+rag_retrieval_chunks = Histogram(
+    "rag_retrieval_chunks",
+    "检索返回的 chunk 数",
+    labelnames=["query_type"],
+    buckets=[0, 1, 2, 3, 5, 10, 20, 50],
+)
+
+# 检索分数分布（检索结果的平均分数——质量退化检测用）
+rag_retrieval_score = Gauge(
+    "rag_retrieval_score",
+    "检索结果的平均分数",
+    labelnames=["query_type"],
+)
+
+# Token 消耗计数器（按模型区分）
+rag_tokens_total = Counter(
+    "rag_tokens_total",
+    "LLM token 消耗总量",
+    labelnames=["model", "token_type"],  # token_type: prompt | completion | total
+)
+
+# 拒答计数器（记录 RAG 系统拒答的频率）
+rag_refusals_total = Counter(
+    "rag_refusals_total",
+    "拒答次数",
+    labelnames=["reason"],  # reason: no_context | low_confidence | policy
+)
+
+# 知识库文档数（Gauge，因为文档数可增可减）
+rag_knowledge_docs = Gauge(
+    "rag_knowledge_docs",
+    "知识库中文档总数",
+)
+
+# LLM 调用延迟（单独的直方图，便于分析 LLM 费用曲线）
+rag_llm_duration_ms = Histogram(
+    "rag_llm_duration_ms",
+    "LLM API 调用延迟（毫秒）",
+    labelnames=["provider", "model"],
+    buckets=[100, 500, 1000, 2000, 5000, 10000, 20000, 30000, 60000],
+)
+
+# ==================== FastAPI 中间件 ====================
+
+async def metrics_middleware(request: Request, call_next: Callable) -> Response:
+    """
+    FastAPI 中间件：自动记录请求指标。
+
+    用法：app.middleware("http")(metrics_middleware)
+
+    对每个请求自动记录：
+    - 请求总数（按 endpoint + method + status 区分）
+    - 请求延迟直方图
+    - 5xx 错误计数
+    """
+    start_time = time.time()
+    response = await call_next(request)
+    duration_ms = int((time.time() - start_time) * 1000)
+
+    # 提取端点路径（用于 label）
+    endpoint = request.url.path
+    method = request.method
+    status = str(response.status_code)
+
+    # 记录请求计数
+    rag_requests_total.labels(endpoint=endpoint, method=method, status=status).inc()
+
+    # 记录延迟
+    rag_request_duration_ms.labels(endpoint=endpoint).observe(duration_ms)
+
+    # 记录 5xx 错误
+    if response.status_code >= 500:
+        rag_errors_total.labels(
+            endpoint=endpoint,
+            error_type="server_error",
+        ).inc()
+    elif response.status_code == 429:
+        rag_errors_total.labels(
+            endpoint=endpoint,
+            error_type="rate_limited",
+        ).inc()
+
+    return response
+
+
+def get_metrics() -> str:
+    """
+    返回 Prometheus 格式的指标文本。
+
+    通过 /metrics 端点返回给 Prometheus 抓取。
+    """
+    return generate_latest(REGISTRY).decode("utf-8")
+</code></pre>
+
+    <div class="panel good">
+      <h3>为什么用 Histogram 而不用 Summary？</h3>
+      <p>Prometheus 的 Histogram 和 Summary 都可以计算分位数（P50/P95/P99）。但在 RAG 场景中，<strong>推荐使用 Histogram</strong>：</p>
+      <ul>
+        <li><strong>Histogram 是可聚合的</strong>：你可以把多个实例的 Histogram 加起来计算全局 P95——Summary 做不到</li>
+        <li><strong>Histogram 支持灵活的桶边界</strong>：RAG 请求延迟范围很广（从 200ms 到 30s），你可以自定义桶来精确捕捉分布</li>
+        <li><strong>Histogram 稍贵</strong>（每个桶一个计数器），但在 10 个桶的水平，成本可忽略</li>
+      </ul>
+    </div>
+
+    <h3>2.3 在 RAG Pipeline 中埋点</h3>
+
+    <p>接下来，在 <code>rag_pipeline.py</code> 中把实际业务指标埋进去——这是监控体系中最有价值的部分：</p>
+
+    <pre><code>"""
+app/rag_pipeline.py — RAG 管线（含监控指标埋点）
+
+在 L13 代码基础上，加入 Prometheus 指标记录。
+改动集中在以下几个方法中：
+- retrieve(): 记录检索结果数、检索分数
+- ask(): 记录 LLM 延迟、token 消耗、拒答事件
+"""
+
+import time
+import logging
+from typing import Optional
+from openai import OpenAI
+
+from .config import settings
+from .metrics import (
+    rag_retrieval_chunks,
+    rag_retrieval_score,
+    rag_tokens_total,
+    rag_refusals_total,
+    rag_llm_duration_ms,
+)
+from .chat_history import SlidingWindowHistory
+from .context_injection import resolve_references
+from .model_adapter import create_chat_adapter
+from .logger import get_logger
+
+logger = get_logger(__name__)
+
+
+class RAGPipeline:
+    """RAG 管线 —— 含监控指标埋点"""
+
+    def __init__(self):
+        self.adapter = create_chat_adapter(
+            settings.llm_provider,
+            settings.llm_model,
+        )
+        self._sessions: dict[str, SlidingWindowHistory] = {}
+        self.doc_count = 0
+        self.is_ready = False
+        logger.info("RAGPipeline 初始化完成",
+                     provider=settings.llm_provider,
+                     model=settings.llm_model)
+
+    def retrieve(self, query: str, top_k: int = 5,
+                 score_threshold: float = 0.0) -> list[dict]:
+        """
+        检索 —— 记录检索结果数和平均分数到 Prometheus。
+        """
+        start = time.time()
+        results = self._search_vector_db(query, top_k, score_threshold)
+        latency = int((time.time() - start) * 1000)
+
+        # 📊 记录检索结果数分布
+        rag_retrieval_chunks.labels(query_type="general").observe(len(results))
+
+        # 📊 记录检索平均分数
+        if results:
+            avg_score = sum(r.get("score", 0) for r in results) / len(results)
+            rag_retrieval_score.labels(query_type="general").set(avg_score)
+
+        logger.info("检索完成", query=query, results=len(results),
+                     latency_ms=latency, avg_score=avg_score if results else 0)
+        return results
+
+    def ask(self, query: str, session_id: Optional[str] = None,
+            user_id: str = "anonymous",
+            temperature: Optional[float] = None,
+            max_tokens: Optional[float] = None) -> dict:
+        """
+        完整 RAG 问答 —— 记录 LLM 延迟、token、拒答等指标。
+        """
+        start = time.time()
+
+        # 1. 获取/创建会话
+        history = self._get_or_create_session(session_id, user_id)
+
+        # 2. 指代消解
+        context_text = history.get_recent_context(n=2)
+        pronouns = {"它", "该", "这个", "那个", "上述", "该产品"}
+        if any(p in query for p in pronouns):
+            augmented_query = resolve_references(query, context_text)
+        else:
+            augmented_query = query
+
+        # 3. 检索
+        results = self.retrieve(augmented_query, top_k=settings.retrieval_top_k)
+
+        # 4. 如果无结果，记录拒答并返回
+        if not results:
+            rag_refusals_total.labels(reason="no_context").inc()
+            # ... 拒答逻辑 ...
+
+        # 5. 构建 context 并调用 LLM
+        context_str = self._format_context(results)
+
+        # 6. 调用 LLM —— 单独记录 LLM 延迟
+        llm_start = time.time()
+        try:
+            answer = self.adapter.chat(messages, temperature=temperature or 0.7)
+        except Exception as e:
+            answer = f"抱歉，模型调用出错了：{str(e)}"
+            from .metrics import rag_errors_total
+            rag_errors_total.labels(endpoint="/ask", error_type="llm_error").inc()
+            logger.error("LLM 调用失败", error=str(e))
+        llm_duration = int((time.time() - llm_start) * 1000)
+
+        # 📊 记录 LLM 调用延迟
+        rag_llm_duration_ms.labels(
+            provider=settings.llm_provider,
+            model=settings.llm_model,
+        ).observe(llm_duration)
+
+        # 📊 记录 token 消耗（粗略估计）
+        prompt_tokens = len(query) + len(context_str)
+        completion_tokens = len(answer)
+        rag_tokens_total.labels(
+            model=settings.llm_model,
+            token_type="prompt",
+        ).inc(prompt_tokens)
+        rag_tokens_total.labels(
+            model=settings.llm_model,
+            token_type="completion",
+        ).inc(completion_tokens)
+        rag_tokens_total.labels(
+            model=settings.llm_model,
+            token_type="total",
+        ).inc(prompt_tokens + completion_tokens)
+
+        # 7. 更新历史
+        history.add_message("user", query)
+        history.add_message("assistant", answer)
+
+        latency_ms = int((time.time() - start) * 1000)
+
+        return {
+            "answer": answer,
+            "session_id": session_id or id(history),
+            "model": self.adapter.get_model_info()["model"],
+            "latency_ms": latency_ms,
+            "llm_duration_ms": llm_duration,
+            "prompt_tokens": prompt_tokens,
+            "completion_tokens": completion_tokens,
+            "refusal": not bool(results),
+        }
+</code></pre>
+
+    <div class="panel warn">
+      <h3>⚠️ Token 计数：估计值 vs 精确值</h3>
+      <p>上面的例子用 <code>len(text)</code> 估算 token 数量——这不精确。在生产环境中，你应该用 <code>tiktoken</code> 库精确计数：</p>
+      <pre><code>import tiktoken
+encoding = tiktoken.encoding_for_model("gpt-4o-mini")
+prompt_tokens = len(encoding.encode(prompt_text))</code></pre>
+      <p>如果模型 SDK 直接返回 <code>usage.prompt_tokens</code>（如 OpenAI API 的响应中就有），优先使用 API 返回的精确值。本课末尾的动手实践环节会要求你改为精确计数。</p>
+    </div>
+
+    <h3>2.4 在 main.py 中注册 metrics 路由和中间件</h3>
+
+    <p>修改 <code>app/main.py</code>，添加 metrics 端点和中间件：</p>
+
+    <pre><code>"""
+app/main.py — FastAPI 应用入口（含监控端点）
+"""
+
+import time
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from contextlib import asynccontextmanager
+
+from .config import settings
+from .models import (
+    RetrieveRequest, RetrieveResponse, RetrievedChunk,
+    AskRequest, AskResponse,
+    EvaluateRequest, EvaluateResponse,
+    HealthResponse,
+)
+from .rag_pipeline import rag_pipeline
+from .logger import get_logger
+from .health import check_service_health
+from .metrics import metrics_middleware, get_metrics  # ← 新增
+
+logger = get_logger(__name__)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """应用生命周期管理"""
+    logger.info("RAG 服务启动", version=settings.version,
+                 provider=settings.llm_provider)
+    await check_service_health()
+
+    # 初始化时设知识库文档数指标
+    from .metrics import rag_knowledge_docs
+    rag_knowledge_docs.set(rag_pipeline.doc_count)
+
+    rag_pipeline.is_ready = True
+    yield
+    rag_pipeline.is_ready = False
+    logger.info("RAG 服务关闭")
+
+
+app = FastAPI(
+    title=settings.app_name,
+    version=settings.version,
+    lifespan=lifespan,
+    docs_url="/docs",
+    redoc_url="/redoc",
+)
+
+# CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# 📊 Prometheus 指标中间件（所有请求自动记录请求数和延迟）
+app.middleware("http")(metrics_middleware)
+
+
+# ===================== 路由 =====================
+
+# 📊 Prometheus 指标端点（被 Prometheus 服务抓取）
+@app.get("/metrics", summary="Prometheus 指标", tags=["监控"])
+async def metrics():
+    """返回 Prometheus 格式的指标数据——供 Prometheus Server 抓取"""
+    from fastapi.responses import PlainTextResponse
+    return PlainTextResponse(content=get_metrics(), media_type="text/plain; version=0.0.4; charset=utf-8")
+
+
+@app.get("/health", response_model=HealthResponse,
+         summary="健康检查", tags=["系统"])
+async def health():
+    """服务健康检查"""
+    services = check_service_health()
+    all_healthy = all(s == "healthy" for s in services.values())
+    return HealthResponse(
+        status="healthy" if all_healthy else "degraded",
+        version=settings.version,
+        services=services,
+        rag_ready=rag_pipeline.is_ready,
+    )
+
+
+# @app.post("/retrieve") ...（与 L13 相同）
+# @app.post("/ask") ...（与 L13 相同）
+# @app.post("/evaluate") ...（与 L13 相同）
+</code></pre>
+
+    <h3>2.5 验证指标</h3>
+
+    <p>重启服务后，访问 <code>/metrics</code> 端点，你会看到类似下面的输出——这就是 Prometheus 要抓取的格式：</p>
+
+    <pre><code># HELP rag_requests_total RAG 服务总请求数
+# TYPE rag_requests_total counter
+rag_requests_total{endpoint="/ask",method="POST",status="200"} 42
+rag_requests_total{endpoint="/health",method="GET",status="200"} 128
+rag_requests_total{endpoint="/retrieve",method="POST",status="200"} 15
+# HELP rag_request_duration_ms RAG 请求延迟（毫秒）
+# TYPE rag_request_duration_ms histogram
+rag_request_duration_ms_bucket{endpoint="/ask",le="50.0"} 0
+rag_request_duration_ms_bucket{endpoint="/ask",le="100.0"} 0
+rag_request_duration_ms_bucket{endpoint="/ask",le="200.0"} 1
+rag_request_duration_ms_bucket{endpoint="/ask",le="500.0"} 5
+rag_request_duration_ms_bucket{endpoint="/ask",le="1000.0"} 12
+rag_request_duration_ms_bucket{endpoint="/ask",le="2000.0"} 28
+rag_request_duration_ms_bucket{endpoint="/ask",le="5000.0"} 38
+rag_request_duration_ms_bucket{endpoint="/ask",le="10000.0"} 41
+rag_request_duration_ms_bucket{endpoint="/ask",le="+Inf"} 42
+rag_request_duration_ms_count{endpoint="/ask"} 42
+rag_request_duration_ms_sum{endpoint="/ask"} 84520</code></pre>
+
+    <div class="panel info">
+      <h3>指标命名规范</h3>
+      <p>Prometheus 社区有推荐的命名规范：</p>
+      <ul>
+        <li><strong>前缀</strong>：用 <code>rag_</code> 作为命名空间前缀，一眼看出是 RAG 服务的指标</li>
+        <li><strong>单位后缀</strong>：<code>_duration_ms</code>（毫秒）、<code>_total</code>（计数器总数）、<code>_bytes</code>（字节）</li>
+        <li><strong>类型后缀</strong>：Counter 加 <code>_total</code>、Histogram 的桶加 <code>_bucket</code>、count 加 <code>_count</code>、sum 加 <code>_sum</code></li>
+        <li><strong>不要用大写</strong>：Prometheus 指标名和 label 名都用小写 + 下划线</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- ===================== 第三部分：基础设施监控 ===================== -->
+  <section>
+    <h2>第三部分：基础设施监控 —— Node Exporter + cAdvisor</h2>
+
+    <p>应用层的指标有了，但你还看不到服务器和容器的健康状况。<span class="tag infra">Node Exporter</span> 负责采集主机的 CPU/内存/磁盘/网络指标，<span class="tag infra">cAdvisor</span> 负责采集每个容器的资源使用情况。</p>
+
+    <h3>3.1 Prometheus 服务 + 监控组件配置</h3>
+
+    <p>在 <code>rag-service/</code> 下创建 <code>prometheus/prometheus.yml</code>：</p>
+
+    <pre><code># prometheus/prometheus.yml — Prometheus 服务配置
+#
+# 定义 Prometheus 从哪些目标抓取指标。
+# 每个 scrape_config 定义一个"job"，对应一组目标。
+#
+
+global:
+  scrape_interval: 15s      # 默认抓取间隔
+  evaluation_interval: 15s  # 告警规则评估间隔
+  scrape_timeout: 10s       # 抓取超时
+
+# 告警规则文件
+rule_files:
+  - "alert-rules.yml"
+
+# 抓取目标配置
+scrape_configs:
+
+  # ---- Prometheus 自身 ----
+  - job_name: "prometheus"
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  # ---- RAG API 应用指标 ----
+  - job_name: "rag-api"
+    metrics_path: "/metrics"
+    static_configs:
+      - targets: ["rag-api:8000"]   # Docker Compose 内部网络
+
+  # ---- Node Exporter 主机指标 ----
+  - job_name: "node-exporter"
+    static_configs:
+      - targets: ["node-exporter:9100"]
+
+  # ---- cAdvisor 容器指标 ----
+  - job_name: "cadvisor"
+    static_configs:
+      - targets: ["cadvisor:8080"]
+</code></pre>
+
+    <h3>3.2 告警规则文件</h3>
+
+    <p>创建 <code>prometheus/alert-rules.yml</code>：</p>
+
+    <pre><code># prometheus/alert-rules.yml — RAG 服务告警规则
+#
+# 每个 group 包含一组相关的告警规则。
+# 语法检查：promtool check rules alert-rules.yml
+#
+
+groups:
+  - name: rag_api_alerts
+    interval: 30s
+    rules:
+
+      # ---- 应用层告警 ----
+      - alert: HighErrorRate
+        expr: |
+          rate(rag_requests_total{status=~"5.."}[5m])
+          /
+          rate(rag_requests_total[5m])
+          > 0.05
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "RAG API 错误率过高"
+          description: "过去 5 分钟错误率 {{ $value | humanizePercentage }}，超过 5% 阈值。"
+          runbook_url: "https://your-wiki/runbooks/rag-high-error-rate"
+
+      - alert: HighLatency
+        expr: |
+          histogram_quantile(0.95,
+            rate(rag_request_duration_ms_bucket{endpoint="/ask"}[5m])
+          ) > 10000
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "RAG /ask 接口 P95 延迟超过 10 秒"
+          description: "当前 P95 延迟 {{ $value | humanizeDuration }}，超过 10s 阈值。"
+
+      - alert: HighLLMLatency
+        expr: |
+          histogram_quantile(0.95,
+            rate(rag_llm_duration_ms_bucket[5m])
+          ) > 20000
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "LLM 调用 P95 延迟超过 20 秒"
+          description: "LLM API P95 延迟 {{ $value | humanizeDuration }}。可能是 API 限流或网络问题。"
+
+      - alert: TokenConsumptionSpike
+        expr: |
+          rate(rag_tokens_total{token_type="total"}[1h])
+          /
+          rate(rag_tokens_total{token_type="total"}[24h])
+          > 3
+        for: 10m
+        labels:
+          severity: info
+        annotations:
+          summary: "Token 消耗异常增长"
+          description: "过去 1 小时的 token 消耗是日均值的 {{ $value | humanize }} 倍。检查是否流量暴增或 LLM 循环。"
+
+      - alert: RetrievalQualityDegraded
+        expr: |
+          rag_retrieval_score < 0.3
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "检索质量下降"
+          description: "检索平均分数 {{ $value | humanize }}，低于 0.3 阈值。知识库可能被损坏或 embedding 异常。"
+
+      # ---- 基础设施层告警 ----
+      - alert: HighCpuUsage
+        expr: |
+          100 - (avg by(instance) (rate(node_cpu_seconds_total{mode="idle"}[2m])) * 100) > 80
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "服务器 CPU 使用率超过 80%"
+          description: "CPU 使用率 {{ $value | humanize }}%。"
+
+      - alert: DiskSpaceLow
+        expr: |
+          (node_filesystem_avail_bytes{mountpoint="/",fstype!="tmpfs"}
+          / node_filesystem_size_bytes{mountpoint="/",fstype!="tmpfs"}) < 0.1
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "磁盘剩余空间不足 10%"
+          description: "磁盘可用空间 {{ $value | humanizePercentage }}，请及时扩容或清理。"
+</code></pre>
+
+    <p>告警规则使用 <strong>PromQL</strong>（Prometheus Query Language）来定义条件。注意两个关键的 PromQL 模式：</p>
+    <ul>
+      <li><strong><code>rate(counter[5m])</code></strong>：Counter 类型指标用 <code>rate()</code> 计算每秒变化率——比如 "每分钟错误数占总请求数的比例"</li>
+      <li><strong><code>histogram_quantile(0.95, rate(histogram_bucket[5m]))</code></strong>：Histogram 类型用 <code>histogram_quantile()</code> 计算分位数——比如 "P95 延迟是多少毫秒"</li>
+    </ul>
+  </section>
+
+  <!-- ===================== 第四部分：Grafana 仪表盘 ===================== -->
+  <section>
+    <h2>第四部分：Grafana —— RAG 专属可视化仪表盘</h2>
+
+    <p><span class="tag graf">Grafana</span> 是展示监控数据的可视化层。它从 Prometheus 读取指标数据，用图表、表格、统计数字展示出来。</p>
+
+    <h3>4.1 数据源自动配置</h3>
+
+    <p>Grafana 支持通过 YAML 文件自动配置数据源（<strong>Provisioning</strong>），避免每次重启手动添加：</p>
+
+    <pre><code># grafana/datasources/prometheus-datasource.yml — Grafana 数据源配置
+#
+# Grafana 启动后自动读取 datasources/ 目录下的 YAML 文件添加数据源。
+# 无需手动在 UI 中配置。
+
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    editable: false
+
+  - name: Loki
+    type: loki
+    access: proxy
+    url: http://loki:3100
+    isDefault: false
+    editable: false
+</code></pre>
+
+    <h3>4.2 RAG 服务仪表盘</h3>
+
+    <p>下面是一个完整的 Grafana 仪表盘 JSON 模型——你不需要完全照抄，可以直接导入到 Grafana 中，然后按需修改。</p>
+
+    <p>典型 RAG 仪表盘包含以下面板：</p>
+
+    <table>
+      <tr><th>面板</th><th>指标</th><th>查询</th></tr>
+      <tr><td>🚦 请求量（每秒）</td><td>QPS 实时曲线</td><td><code>rate(rag_requests_total[1m])</code></td></tr>
+      <tr><td>⏱ 延迟 P95</td><td>P50/P95/P99 三条曲线</td><td><code>histogram_quantile(0.95, rate(...))</code></td></tr>
+      <tr><td>❌ 错误率</td><td>错误请求占比</td><td><code>rate(rag_requests_total{status=~"5.."}[5m]) / rate(rag_requests_total[5m])</code></td></tr>
+      <tr><td>🔍 检索结果数</td><td>检索返回的 chunk 数直方图</td><td><code>rate(rag_retrieval_chunks_count[5m])</code></td></tr>
+      <tr><td>🎯 检索平均分数</td><td>质量退化监控</td><td><code>rag_retrieval_score</code></td></tr>
+      <tr><td>🪙 Token 消耗</td><td>按模型/类型分组的消耗量</td><td><code>rate(rag_tokens_total[5m])</code></td></tr>
+      <tr><td>🖥 CPU/内存</td><td>服务器资源使用率</td><td><code>node_cpu_seconds_total</code> / <code>node_memory_MemTotal_bytes</code></td></tr>
+    </table>
+
+    <div class="panel info">
+      <h3>Grafana Dashboard as Code</h3>
+      <p>上面这个仪表盘可以通过 Grafana 的 <strong>Provisioning</strong> 自动加载——把 JSON 文件放到 <code>grafana/dashboards/</code> 目录下，重启后自动出现。</p>
+      <p>Dashboards as Code 的最佳实践：</p>
+      <ul>
+        <li>所有仪表盘配置存入 Git 仓库，版本控制</li>
+        <li>每次代码变更都同步更新仪表盘</li>
+        <li>通过 CI/CD 自动部署到 Grafana</li>
+        <li>避免直接在 Grafana UI 中修改面板——改了就丢了版本历史</li>
+      </ul>
+    </div>
+
+    <h3>4.3 关键 PromQL 查询详解</h3>
+
+    <p>监控 RAG 系统最常用的几个 PromQL 查询——理解它们，你就掌握了 80% 的日常监控需求：</p>
+
+    <table>
+      <tr><th>查询目标</th><th>PromQL 查询</th><th>解释</th></tr>
+      <tr>
+        <td>每秒请求数（QPS）</td>
+        <td><code>rate(rag_requests_total[endpoint="/ask"][5m])</code></td>
+        <td>过去 5 分钟 /ask 接口每秒平均请求数。Counter → rate() 是最常用模式。</td>
+      </tr>
+      <tr>
+        <td>P95 延迟</td>
+        <td><code>histogram_quantile(0.95, rate(rag_request_duration_ms_bucket[5m]))</code></td>
+        <td>过去 5 分钟内，95% 的请求延迟低于这个值。比平均延迟更有意义的指标。</td>
+      </tr>
+      <tr>
+        <td>错误率</td>
+        <td><code>sum(rate(rag_requests_total{status=~"5.."}[5m])) / sum(rate(rag_requests_total[5m]))</code></td>
+        <td>5xx 错误占总请求的比例。SLA 通常要求 &lt; 0.1%。</td>
+      </tr>
+      <tr>
+        <td>Token 消耗趋势</td>
+        <td><code>rate(rag_tokens_total{token_type="total", model="gpt-4o-mini"}[1h])</code></td>
+        <td>每小时 token 消耗速率——费用监控的基础。</td>
+      </tr>
+      <tr>
+        <td>服务可用性</td>
+        <td><code>up{job="rag-api"}</code></td>
+        <td>Prometheus 内置指标：1 表示目标可达，0 表示不可达。所有 job 的 up 都 =1 才表示系统健康。</td>
+      </tr>
+      <tr>
+        <td>容器内存使用</td>
+        <td><code>container_memory_usage_bytes{container_label_com_docker_compose_service="rag-api"}</code></td>
+        <td>cAdvisor 提供的容器级内存指标。label 匹配 Docker Compose 服务名。</td>
+      </tr>
+    </table>
+
+    <div class="panel warn">
+      <h3>PromQL 学习建议</h3>
+      <p>PromQL 是用好 Prometheus 的"门槛"。本课不会深入覆盖所有语法，但建议你花 30 分钟阅读 <a href="https://prometheus.io/docs/prometheus/latest/querying/basics/">PromQL 官方基础教程</a>。掌握以下四个模式就能应对 90% 的 RAG 监控场景：</p>
+      <ol>
+        <li><code>rate(counter[5m])</code> —— 将 Counter 转换为每秒速率</li>
+        <li><code>histogram_quantile(0.95, rate(...))</code> —— 从 Histogram 计算 P95</li>
+        <li><code>sum(rate(...)) by (label)</code> —— 按 label 聚合</li>
+        <li><code>gauge > threshold</code> —— 阈值判断（用于告警）</li>
+      </ol>
+    </div>
+  </section>
+
+  <!-- ===================== 第五部分：Langfuse ===================== -->
+  <section>
+    <h2>第五部分：LLM 调用链追踪 —— Langfuse</h2>
+
+    <p>指标和日志可以告诉你"哪里出了问题"，但要理解<strong>为什么</strong> LLM 给出了一个糟糕的回答，你需要看到每次 LLM 调用的完整上下文——输入了什么 prompt、返回了什么、用了多少 token、调用了哪个模型。</p>
+
+    <p><span class="tag trace">Langfuse</span> 是一个开源（MIT）的 LLM 可观测性平台，专门解决这个问题。</p>
+
+    <h3>5.1 Langfuse 核心概念</h3>
+
+    <table>
+      <tr><th>概念</th><th>说明</th><th>在 RAG 中的对应</th></tr>
+      <tr><td><strong>Trace</strong>（追踪）</td><td>一次完整的请求链路</td><td>一次 /ask 请求的完整生命周期</td></tr>
+      <tr><td><strong>Span</strong>（跨度）</td><td>Trace 中的子阶段</td><td>检索阶段、LLM 调用阶段、指代消解阶段</td></tr>
+      <tr><td><strong>Generation</strong>（生成）</td><td>LLM 调用的专门 span</td><td>LLM chat completion 调用</td></tr>
+      <tr><td><strong>Score</strong>（评分）</td><td>对 trace/span 的人工或自动评分</td><td>Faithfulness 评分、Answer Relevancy 评分</td></tr>
+      <tr><td><strong>Session</strong>（会话）</td><td>一组关联的 trace</td><td>一个用户的完整对话</td></tr>
+    </table>
+
+    <p>Langfuse 的整体架构：</p>
+
+    <div class="diagram">
+      <div class="box" style="border-color:#0f766e;">RAG API</div>
+      <div class="arrow">→</div>
+      <div class="box trace">Langfuse Python SDK</div>
+      <div class="arrow">→</div>
+      <div class="box trace" style="border-width:3px;">Langfuse Server</div>
+      <div class="arrow">→</div>
+      <div class="box graf">Langfuse UI<br><span class="small">仪表盘 + 追踪查看</span></div>
+      <br>
+      <div class="box muted" style="border-color:#7c3aed;">PostgreSQL<br><span class="small">Langfuse 持久化存储</span></div>
+    </div>
+
+    <h3>5.2 在 Docker Compose 中加入 Langfuse</h3>
+
+    <p>Langfuse 需要 PostgreSQL 作为存储后端。在 <code>docker-compose.yml</code> 中添加：</p>
+
+    <pre><code>  # ==================== Langfuse LLM 追踪 ====================
+  langfuse-server:
+    image: ghcr.io/langfuse/langfuse:latest
+    container_name: rag-langfuse
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - DATABASE_URL=postgresql://langfuse:langfuse@langfuse-db:5432/langfuse
+      - NEXTAUTH_SECRET=${LANGFUSE_SECRET:-changeme-in-production}
+      - NEXTAUTH_URL=http://localhost:3000
+      - SALT=mysalt
+    depends_on:
+      langfuse-db:
+        condition: service_healthy
+    networks:
+      - rag-network
+
+  langfuse-db:
+    image: postgres:15-alpine
+    container_name: rag-langfuse-db
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=langfuse
+      - POSTGRES_PASSWORD=langfuse
+      - POSTGRES_DB=langfuse
+    volumes:
+      - ./data/langfuse-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U langfuse"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - rag-network</code></pre>
+
+    <p>然后在 <code>.env</code> 中添加 Langfuse 的 API Key：</p>
+
+    <pre><code># ---- Langfuse LLM 追踪 ----
+LANGFUSE_SECRET=your-secret-key-here
+LANGFUSE_PUBLIC_KEY=pk-your-public-key
+LANGFUSE_HOST=http://langfuse-server:3000</code></pre>
+
+    <h3>5.3 集成 Langfuse 到 RAG Pipeline</h3>
+
+    <p><span class="tag trace">关键代码</span> Langfuse Python SDK 提供两种集成方式：</p>
+    <ol>
+      <li><strong>自动装饰器</strong> <code>@observe()</code>：自动捕获函数的输入输出和耗时——适用于函数级追踪</li>
+      <li><strong>手动创建 Traces 和 Spans</strong>：更精确的控制——适用于自定义追踪结构</li>
+    </ol>
+
+    <p>新建 <code>app/tracing.py</code> 文件：</p>
+
+    <pre><code>"""
+app/tracing.py — Langfuse LLM 调用链追踪
+
+为 RAG 管线的关键环节添加追踪能力：
+- 每次 /ask 请求 = 一个 Trace
+- 检索阶段 = 一个 Span
+- LLM 调用阶段 = 一个 Generation（特殊的 Span，记录 prompt/completion/tokens）
+- 质量评估 = 一个 Score
+
+Langfuse SDK 初始化：https://langfuse.com/docs/sdk/python
+"""
+
+import os
+import logging
+from functools import wraps
+from typing import Optional, Any
+from .config import settings
+
+logger = logging.getLogger(__name__)
+
+# ----- 延迟初始化（避免 Langfuse 未就绪时阻塞应用） -----
+_langfuse = None
+
+
+def get_langfuse():
+    """
+    获取 Langfuse 客户端实例（延迟初始化）。
+
+    如果 Langfuse 未配置，返回 None——追踪被优雅跳过。
+    这样本地开发时不启动 Langfuse 也不影响业务。
+    """
+    global _langfuse
+    if _langfuse is not None:
+        return _langfuse
+
+    # 检查环境变量
+    public_key = os.getenv("LANGFUSE_PUBLIC_KEY", "")
+    secret_key = os.getenv("LANGFUSE_SECRET_KEY", "")
+    host = os.getenv("LANGFUSE_HOST", "http://localhost:3000")
+
+    if not public_key or not secret_key:
+        logger.info("Langfuse 未配置（缺少 LANGFUSE_PUBLIC_KEY/LANGFUSE_SECRET_KEY），跳过追踪")
+        _langfuse = None
+        return None
+
+    try:
+        from langfuse import Langfuse
+        _langfuse = Langfuse(
+            public_key=public_key,
+            secret_key=secret_key,
+            host=host,
+        )
+        logger.info("Langfuse 客户端初始化成功", extra={"host": host})
+        return _langfuse
+    except Exception as e:
+        logger.warning("Langfuse 初始化失败（不影响服务运行）", extra={"error": str(e)})
+        return None
+
+
+def trace_rag_query(func):
+    """
+    装饰器：为 RAG 查询方法添加 Langfuse 追踪。
+
+    用法：
+        @trace_rag_query
+        def ask(self, query, ...):
+            ...
+
+    自动创建一个 Trace，记录：
+    - 输入：用户查询
+    - 输出：RAG 回答
+    - 延迟
+    - 额外属性（模型、token 数等）
+    """
+
+    @wraps(func)
+    def wrapper(self, *args, **kwargs):
+        langfuse = get_langfuse()
+        query = kwargs.get("query", args[0] if args else "unknown")
+        session_id = kwargs.get("session_id", "anonymous")
+
+        # 创建 Trace
+        trace = None
+        if langfuse:
+            trace = langfuse.trace(
+                name="rag_query",
+                input=query,
+                session_id=session_id,
+                metadata={
+                    "user_id": kwargs.get("user_id", "anonymous"),
+                    "provider": settings.llm_provider,
+                    "model": settings.llm_model,
+                },
+            )
+
+        # 执行原始方法
+        result = func(self, *args, **kwargs)
+
+        # 记录结果到 trace
+        if trace and result:
+            trace.update(
+                output=result.get("answer", ""),
+                metadata={
+                    **trace.metadata,
+                    "latency_ms": result.get("latency_ms", 0),
+                    "refusal": result.get("refusal", False),
+                    "retrieval_count": len(result.get("retrieval_results", [])),
+                },
+            )
+
+        return result
+
+    return wrapper
+
+
+def trace_retrieval(langfuse_trace, query: str, results: list):
+    """
+    为检索阶段创建一个 Span。
+
+    参数：
+        langfuse_trace: Langfuse Trace 实例
+        query: 检索使用的查询
+        results: 检索结果列表
+
+    返回：检索 Span
+    """
+    if not langfuse_trace:
+        return None
+
+    span = langfuse_trace.span(
+        name="retrieval",
+        input=query,
+        metadata={
+            "result_count": len(results),
+            "avg_score": sum(r.get("score", 0) for r in results) / len(results) if results else 0,
+        },
+    )
+    span.end(
+        output=f"返回 {len(results)} 条结果",
+    )
+    return span
+
+
+def trace_llm_call(langfuse_trace, provider: str, model: str,
+                   messages: list, response: str,
+                   prompt_tokens: int, completion_tokens: int):
+    """
+    为 LLM 调用创建一个 Generation。
+
+    Generation 是 Langfuse 的特殊 Span 类型，专门用于 LLM 调用。
+    Langfuse 会自动统计 token 消耗和费用估算。
+    """
+    if not langfuse_trace:
+        return None
+
+    generation = langfuse_trace.generation(
+        name="llm_call",
+        model=model,
+        model_parameters={
+            "provider": provider,
+            "temperature": 0.7,
+        },
+        input=messages,
+        output=response,
+        usage={
+            "prompt_tokens": prompt_tokens,
+            "completion_tokens": completion_tokens,
+            "total_tokens": prompt_tokens + completion_tokens,
+        },
+    )
+    generation.end()
+    return generation
+
+
+def score_answer(langfuse_trace, name: str, value: float, comment: str = ""):
+    """
+    为追踪添加评分。
+
+    Langfuse 支持人工评分和模型评分（LLM-as-a-Judge）。
+    你可以在这里记录 L7 的 Faithfulness、Answer Relevancy 等指标。
+    """
+    if not langfuse_trace:
+        return
+
+    langfuse_trace.score(
+        name=name,
+        value=value,
+        comment=comment,
+    )
+</code></pre>
+
+    <h3>5.4 在 rag_pipeline.py 中使用追踪</h3>
+
+    <p>修改 <code>ask()</code> 方法，加入追踪装饰器：</p>
+
+    <pre><code>from .tracing import trace_rag_query, get_langfuse, trace_retrieval, trace_llm_call
+
+class RAGPipeline:
+
+    @trace_rag_query  # ← 自动追踪整个 ask 方法
+    def ask(self, query: str, session_id: Optional[str] = None,
+            user_id: str = "anonymous",
+            temperature: Optional[float] = None,
+            max_tokens: Optional[float] = None) -> dict:
+        # ...（前面的代码与之前相同）
+
+        # 在检索后：如果 Langfuse 可用，创建检索 Span
+        langfuse = get_langfuse()
+        # 注意：trace_rag_query 装饰器已经创建了 Trace，
+        # 这里可以通过全局或参数传递 trace 对象
+        # 本课简化版通过模块级变量传递，生产建议用 contextvar
+
+        # 记录 LLM 调用
+        # 调用适配器的 chat 方法
+        llm_start = time.time()
+        answer = self.adapter.chat(messages, temperature=temperature)
+        llm_duration = int((time.time() - llm_start) * 1000)
+
+        # 记录指标
+        rag_llm_duration_ms.labels(
+            provider=settings.llm_provider,
+            model=settings.llm_model,
+        ).observe(llm_duration)
+
+        return {
+            "answer": answer,
+            # ...
+        }
+</code></pre>
+
+    <div class="panel good">
+      <h3>Langfuse 能帮你做什么</h3>
+      <p>一旦 Langfuse 跑起来，你就能在它的 UI 中：</p>
+      <ul>
+        <li>🔍 搜索任意一次 LLM 调用——按 session、用户、时间范围</li>
+        <li>📝 查看每次调用的完整 <strong>prompt 和 response</strong>——不再猜测 LLM 收到了什么</li>
+        <li>💰 按模型、用户、时间维度统计 <strong>token 消耗和费用</strong></li>
+        <li>⏱ 看到每个环节的耗时——检索花了多少，LLM 调用花了多少</li>
+        <li>⭐ 给回答打质量分（手动或自动）——追踪质量趋势</li>
+        <li>🔗 从 LLM 调用点链接到 App 日志和服务器指标</li>
+      </ul>
+    </div>
+
+    <h3>5.5 查看 Langfuse 数据</h3>
+
+    <p>启动后，在浏览器打开 <code>http://localhost:3000</code> 进入 Langfuse UI。你会看到类似这样的追踪数据：</p>
+
+    <pre><code>Trace: rag_query
+├── Metadata: provider=openai, model=gpt-4o-mini, latency_ms=2845
+├── Span: retrieval
+│   ├── input: "什么是 RAG？它的工作原理是什么？"
+│   ├── output: "返回 5 条结果"
+│   └── metadata: result_count=5, avg_score=0.72
+└── Generation: llm_call
+    ├── model: gpt-4o-mini
+    ├── input: [{"role":"system","content":"..."}, {"role":"user","content":"..."}]
+    ├── output: "RAG 是检索增强生成..."
+    └── usage: prompt_tokens=1243, completion_tokens=156</code></pre>
+
+    <p>这种"树形追踪结构"让你可以一眼看出：检索花了多少时间、LLM 调用花了多少时间、token 用了多少、以及最终回答质量。这是排查"为什么回答差"的核心工具。</p>
+  </section>
+
+  <!-- ===================== 第六部分：Loki ===================== -->
+  <section>
+    <h2>第六部分：日志聚合 —— Loki + Promtail</h2>
+
+    <p>L13 已经实现了 JSON 结构化日志（每行日志是一个 JSON 对象）。但日志分散在多个容器中——当你要排查问题时，需要跨容器搜索日志。</p>
+
+    <p><span class="tag log">Loki</span> 是 Grafana 生态的日志聚合系统，专为 Prometheus 用户设计。它不索引日志内容，只索引标签（label），因此比 ELK 更轻量、更便宜。</p>
+
+    <h3>6.1 Loki vs ELK</h3>
+
+    <table>
+      <tr><th>特性</th><th>Loki</th><th>ELK（Elasticsearch + Logstash + Kibana）</th></tr>
+      <tr><td>索引策略</td><td>只索引 label（标签）</td><td>全文索引</td></tr>
+      <tr><td>存储效率</td><td>高（不索引内容）</td><td>低（全文索引占大量磁盘）</td></tr>
+      <tr><td>与 Grafana 集成</td><td>原生</td><td>需要额外配置</td></tr>
+      <tr><td>查询语言</td><td>LogQL（类似 PromQL）</td><td>Query DSL</td></tr>
+      <tr><td>查询速度</td><td>标签过滤快，内容搜索慢</td><td>全字段索引，各种查询都快</td></tr>
+      <tr><td>适合场景</td><td>Kubernetes/Docker 日志、结构化日志</td><td>需要全文检索的审计日志</td></tr>
+    </table>
+
+    <p>对于 RAG 系统的 JSON 结构化日志，<strong>Loki 是更轻量、更经济的选择</strong>——因为你的日志已经是 JSON 结构，label 足够定位问题，不需要 ELK 的全文索引能力。</p>
+
+    <h3>6.2 Loki 配置</h3>
+
+    <p>创建 <code>loki/loki-config.yml</code>：</p>
+
+    <pre><code># loki/loki-config.yml — Loki 配置
+#
+# Loki 接收 Promtail 发送的日志，并存储。
+# 它与 Prometheus 共享相同的 Label 理念。
+
+auth_enabled: false
+
+server:
+  http_listen_port: 3100
+  grpc_listen_port: 9096
+
+ingester:
+  wal:
+    enabled: true
+    dir: /tmp/wal
+  lifecycler:
+    ring:
+      kvstore:
+        store: inmemory
+      replication_factor: 1
+
+schema_config:
+  configs:
+    - from: 2020-10-24
+      store: boltdb-shipper
+      object_store: filesystem
+      schema: v11
+      index:
+        prefix: index_
+        period: 24h
+
+storage_config:
+  boltdb_shipper:
+    active_index_directory: /tmp/loki/index
+    cache_location: /tmp/loki/cache
+  filesystem:
+    directory: /tmp/loki/chunks
+
+limits_config:
+  enforce_metric_name: false
+  reject_old_samples: true
+  reject_old_samples_max_age: 168h
+
+chunk_store_config:
+  max_look_back_period: 0s
+
+table_manager:
+  retention_deletes_enabled: true
+  retention_period: 168h  # 保留 7 天
+</code></pre>
+
+    <h3>6.3 Promtail 配置</h3>
+
+    <p>创建 <code>promtail/promtail-config.yml</code> — Promtail 负责从 Docker 容器收集日志并发送给 Loki：</p>
+
+    <pre><code># promtail/promtail-config.yml — Promtail 日志采集配置
+#
+# Promtail 运行在 Docker 中，通过 Docker 的日志驱动获取日志，
+# 添加 label（如 service_name、container_name），然后推送到 Loki。
+#
+# 关键 label 设计：
+# - job: 日志来源（统一用 "docker"）
+# - container_name: 容器名（如 rag-api、rag-chroma）
+# - service: 服务类型（rag-api、chroma、redis、nginx）
+
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+
+positions:
+  filename: /tmp/positions.yaml
+
+clients:
+  - url: http://loki:3100/loki/api/v1/push
+
+scrape_configs:
+  - job_name: docker
+    docker_sd_configs:
+      - host: unix:///var/run/docker.sock
+        refresh_interval: 5s
+    relabel_configs:
+      # 容器名作为 label
+      - source_labels: ["__meta_docker_container_name"]
+        regex: "/(.*)"
+        target_label: "container_name"
+      # 镜像名作为 label
+      - source_labels: ["__meta_docker_container_image"]
+        target_label: "image"
+      # 添加服务类型的 label（通过容器名的前缀判断）
+      - source_labels: ["__meta_docker_container_name"]
+        regex: "rag-api.*"
+        target_label: "service"
+        replacement: "rag-api"
+      - source_labels: ["__meta_docker_container_name"]
+        regex: "rag-chroma.*"
+        target_label: "service"
+        replacement: "chroma"
+      - source_labels: ["__meta_docker_container_name"]
+        regex: "rag-redis.*"
+        target_label: "service"
+        replacement: "redis"
+      - source_labels: ["__meta_docker_container_name"]
+        regex: "rag-nginx.*"
+        target_label: "service"
+        replacement: "nginx"
+</code></pre>
+
+    <h3>6.4 在 Grafana 中查询日志</h3>
+
+    <p>一旦 Loki 接入成功，你可以在 Grafana 的 Explore 页面中用 LogQL 查询日志：</p>
+
+    <pre><code># 查看所有 RAG API 的日志
+{service="rag-api"}
+
+# 查看错误日志
+{service="rag-api"} |= "ERROR"
+
+# 查看某个 session 的所有日志
+{service="rag-api"} |= "abc123-session-id"
+
+# 查看特定延迟范围的日志
+{service="rag-api"} |= "latency_ms" | json | latency_ms > 5000
+
+# 统计每分钟的错误数
+sum by (level) (rate({service="rag-api"} |= "ERROR" [5m]))</code></pre>
+
+    <div class="panel info">
+      <h3>从指标到日志：关联工作流</h3>
+      <p>一个典型的"指标 → 日志"工作流：</p>
+      <ol>
+        <li>发现 Grafana 仪表盘上的 <strong>错误率曲线</strong>突然上升</li>
+        <li>点击曲线上的异常点，选择"View in Explore"→ 自动跳转到 Loki 查询</li>
+        <li>Loki 自动填入时间范围，只显示该时段内 <code>service="rag-api"</code> 的日志</li>
+        <li>搜索 <code>"ERROR"</code> → 看到具体的错误信息</li>
+        <li>找到错误中的 <code>session_id</code> → 去 Langfuse 查这次请求的完整 Trace</li>
+      </ol>
+      <p>整个过程不需要切换工具——全在 Grafana 中完成。这就是"关联的可观测性"（Correlated Observability）的威力。</p>
+    </div>
+  </section>
+
+  <!-- ===================== 第七部分：完整 Docker Compose ===================== -->
+  <section>
+    <h2>第七部分：更新 Docker Compose —— 编排整个监控栈</h2>
+
+    <p>现在把前面所有组件的编排整合到 <code>docker-compose.yml</code> 中。</p>
+
+    <p>完整的新增服务清单：</p>
+
+    <table>
+      <tr><th>服务</th><th>镜像</th><th>端口</th><th>用途</th></tr>
+      <tr><td>prometheus</td><td>prom/prometheus</td><td>9090</td><td>指标存储与查询</td></tr>
+      <tr><td>node-exporter</td><td>prom/node-exporter</td><td>9100</td><td>主机指标采集</td></tr>
+      <tr><td>cadvisor</td><td>gcr.io/cadvisor/cadvisor</td><td>8080</td><td>容器指标采集</td></tr>
+      <tr><td>grafana</td><td>grafana/grafana</td><td>3000</td><td>可视化仪表盘</td></tr>
+      <tr><td>loki</td><td>grafana/loki</td><td>3100</td><td>日志聚合</td></tr>
+      <tr><td>promtail</td><td>grafana/promtail</td><td>9080</td><td>日志采集</td></tr>
+      <tr><td>alertmanager</td><td>prom/alertmanager</td><td>9093</td><td>告警管理</td></tr>
+      <tr><td>langfuse-server</td><td>ghcr.io/langfuse/langfuse</td><td>3000</td><td>LLM 追踪</td></tr>
+    </table>
+
+    <div class="panel warn">
+      <h3>⚠️ 生产环境注意</h3>
+      <p>Langfuse 和 Grafana 默认端口都是 3000——不能同时映射到宿主机同一个端口。在编排中，Langfuse 使用 <code>3000:3000</code>，Grafana 使用 <code>3001:3000</code>。或者生产环境中使用不同的域名（通过 Nginx 反向代理区分）。</p>
+    </div>
+
+    <p>在 L13 的 <code>docker-compose.yml</code> 基础上，加入以下服务定义：</p>
+
+    <pre><code># ==================== Prometheus 监控 ====================
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: rag-prometheus
+    restart: unless-stopped
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./prometheus/alert-rules.yml:/etc/prometheus/alert-rules.yml:ro
+      - ./data/prometheus:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=15d"  # 保留 15 天
+    ports:
+      - "9090:9090"
+    networks:
+      - rag-network
+
+  node-exporter:
+    image: prom/node-exporter:latest
+    container_name: rag-node-exporter
+    restart: unless-stopped
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    command:
+      - "--path.procfs=/host/proc"
+      - "--path.sysfs=/host/sys"
+      - "--path.rootfs=/rootfs"
+    ports:
+      - "9100:9100"
+    networks:
+      - rag-network
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:latest
+    container_name: rag-cadvisor
+    restart: unless-stopped
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+    ports:
+      - "8080:8080"
+    privileged: true
+    networks:
+      - rag-network
+
+  # ==================== Grafana 可视化 ====================
+  grafana:
+    image: grafana/grafana:latest
+    container_name: rag-grafana
+    restart: unless-stopped
+    volumes:
+      - ./grafana/datasources:/etc/grafana/provisioning/datasources:ro
+      - ./grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./data/grafana:/var/lib/grafana
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
+      - GF_INSTALL_PLUGINS=
+    ports:
+      - "3001:3000"
+    depends_on:
+      - prometheus
+      - loki
+    networks:
+      - rag-network
+
+  # ==================== Loki 日志聚合 ====================
+  loki:
+    image: grafana/loki:latest
+    container_name: rag-loki
+    restart: unless-stopped
+    volumes:
+      - ./loki/loki-config.yml:/etc/loki/loki-config.yml:ro
+      - ./data/loki:/tmp/loki
+    command: -config.file=/etc/loki/loki-config.yml
+    ports:
+      - "3100:3100"
+    networks:
+      - rag-network
+
+  promtail:
+    image: grafana/promtail:latest
+    container_name: rag-promtail
+    restart: unless-stopped
+    volumes:
+      - ./promtail/promtail-config.yml:/etc/promtail/promtail-config.yml:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+    command: -config.file=/etc/promtail/promtail-config.yml
+    depends_on:
+      - loki
+    networks:
+      - rag-network
+
+  # ==================== Alertmanager 告警 ====================
+  alertmanager:
+    image: prom/alertmanager:latest
+    container_name: rag-alertmanager
+    restart: unless-stopped
+    volumes:
+      - ./alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - ./data/alertmanager:/alertmanager
+    command:
+      - "--config.file=/etc/alertmanager/alertmanager.yml"
+      - "--storage.path=/alertmanager"
+    ports:
+      - "9093:9093"
+    networks:
+      - rag-network</code></pre>
+
+    <p>别忘了在 <code>requirements.txt</code> 中添加新的 Python 依赖：</p>
+
+    <pre><code># 监控
+prometheus-client>=0.20.0
+langfuse>=2.0.0
+</code></pre>
+
+    <div class="panel good">
+      <h3>文件结构总览</h3>
+      <p>本课完成后，项目文件结构如下（新增和修改的文件用黄色标记）：</p>
+      <div class="file-tree">
+rag-service/<br>
+├── app/<br>
+│   ├── __init__.py<br>
+│   ├── main.py                  <span class="hl hl">← 修改：添加 /metrics 端点和中间件</span><br>
+│   ├── config.py<br>
+│   ├── models.py<br>
+│   ├── rag_pipeline.py          <span class="hl hl">← 修改：添加指标埋点和追踪</span><br>
+│   ├── metrics.py               <span class="hl">← 新增：Prometheus 指标定义</span><br>
+│   ├── tracing.py               <span class="hl">← 新增：Langfuse 追踪</span><br>
+│   ├── chat_history.py<br>
+│   ├── context_injection.py<br>
+│   ├── model_adapter.py<br>
+│   ├── confidence.py<br>
+│   ├── refusal_templates.py<br>
+│   ├── health.py<br>
+│   └── logger.py<br>
+├── Dockerfile<br>
+├── docker-compose.yml           <span class="hl hl">← 修改：添加 8 个监控服务</span><br>
+├── prometheus/<br>
+│   ├── prometheus.yml            <span class="hl">← 新增：Prometheus 配置</span><br>
+│   └── alert-rules.yml           <span class="hl">← 新增：告警规则</span><br>
+├── grafana/<br>
+│   ├── datasources/<br>
+│   │   └── prometheus-datasource.yml <span class="hl">← 新增：数据源自动配置</span><br>
+│   └── dashboards/<br>
+│       └── rag-dashboard.json    <span class="hl">← 新增：RAG 仪表盘定义</span><br>
+├── loki/<br>
+│   └── loki-config.yml           <span class="hl">← 新增：Loki 配置</span><br>
+├── promtail/<br>
+│   └── promtail-config.yml       <span class="hl">← 新增：Promtail 配置</span><br>
+├── alertmanager/<br>
+│   └── alertmanager.yml          <span class="hl">← 新增：Alertmanager 配置</span><br>
+├── nginx.conf<br>
+├── .env.example<br>
+├── .gitignore<br>
+└── requirements.txt<br>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== 第八部分：告警通知 ===================== -->
+  <section>
+    <h2>第八部分：告警通知 —— 问题发生时第一时间知道</h2>
+
+    <p>指标采集了、仪表盘搭了——但如果你不盯着 Grafana，问题发生时不会自动通知你。这就是 <span class="tag alert">Alertmanager</span> 的作用：</p>
+
+    <div class="flow">
+      <div class="flow-box">Prometheus<br>评估告警规则</div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-box" style="border-color:#a10e25;">Alertmanager<br>路由/分组/抑制</div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-box" style="border-color:#8b5e00;">飞书/钉钉/企微<br>Webhook 通知</div>
+    </div>
+
+    <h3>8.1 Alertmanager 配置</h3>
+
+    <p>创建 <code>alertmanager/alertmanager.yml</code>：</p>
+
+    <pre><code># alertmanager/alertmanager.yml — Alertmanager 告警通知配置
+#
+# 当 Prometheus 的告警规则被触发时，Alertmanager 负责：
+# 1. 分组（Grouping）：相同类型的告警合并为一条通知——避免告警风暴
+# 2. 抑制（Inhibition）：高级别告警自动抑制低级别告警
+# 3. 路由（Routing）：不同严重级别的告警发到不同的接收者
+
+global:
+  # 所有通知的默认参数
+  resolve_timeout: 5m
+
+route:
+  # 根路由——所有告警先进入这里
+  group_by: ["alertname", "severity"]  # 按告警名和严重级别分组
+  group_wait: 30s           # 同一组告警等待 30s 再发送——收集更多上下文
+  group_interval: 5m        # 同一组告警的发送间隔
+  repeat_interval: 4h       # 告警未恢复时，每 4 小时重新通知一次
+
+  # 根据严重级别路由到不同接收者
+  routes:
+    - receiver: "critical-webhook"
+      match:
+        severity: "critical"
+      repeat_interval: 1h  # critical 级别重复频率更高
+
+    - receiver: "warning-webhook"
+      match:
+        severity: "warning"
+
+    - receiver: "info-webhook"
+      match:
+        severity: "info"
+
+receivers:
+  - name: "critical-webhook"
+    webhook_configs:
+      - url: "${WEBHOOK_CRITICAL_URL}"  # 飞书/钉钉/企微 webhook
+        send_resolved: true
+
+  - name: "warning-webhook"
+    webhook_configs:
+      - url: "${WEBHOOK_WARNING_URL}"
+        send_resolved: true
+
+  - name: "info-webhook"
+    webhook_configs:
+      - url: "${WEBHOOK_INFO_URL}"
+        send_resolved: false  # info 级别的告警恢复不通知
+
+# 抑制规则：如果已经有 critical 告警正在触发，
+# 则自动抑制同一服务上的 warning 和 info 告警
+inhibit_rules:
+  - source_match:
+      severity: "critical"
+    target_match:
+      severity: "warning"
+    equal: ["alertname"]
+
+  - source_match:
+      severity: "critical"
+    target_match:
+      severity: "info"
+    equal: ["alertname"]
+</code></pre>
+
+    <h3>8.2 配置飞书/钉钉/企业微信 Webhook</h3>
+
+    <p>三个平台的企业机器人 Webhook 配置方式大同小异：</p>
+
+    <div class="three-col">
+      <div class="panel info">
+        <h4>飞书机器人</h4>
+        <ol>
+          <li>群设置 → 群机器人 → 添加机器人 → 自定义机器人</li>
+          <li>复制 Webhook URL：<code>https://open.feishu.cn/open-apis/bot/v2/hook/xxx</code></li>
+        </ol>
+      </div>
+      <div class="panel info">
+        <h4>钉钉机器人</h4>
+        <ol>
+          <li>群设置 → 智能群助手 → 添加机器人 → 自定义</li>
+          <li>复制 Webhook URL：<code>https://oapi.dingtalk.com/robot/send?access_token=xxx</code></li>
+          <li>建议开启"加签"安全设置</li>
+        </ol>
+      </div>
+      <div class="panel info">
+        <h4>企业微信机器人</h4>
+        <ol>
+          <li>群设置 → 群机器人 → 添加 → 新机器人</li>
+          <li>复制 Webhook URL：<code>https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=xxx</code></li>
+        </ol>
+      </div>
+    </div>
+
+    <p>把 webhook URL 写入 <code>.env</code>：</p>
+
+    <pre><code># ---- 告警通知 Webhook（选一个你用的平台）----
+# 飞书
+WEBHOOK_CRITICAL_URL=https://open.feishu.cn/open-apis/bot/v2/hook/your-token
+# 钉钉
+WEBHOOK_CRITICAL_URL=https://oapi.dingtalk.com/robot/send?access_token=your-token
+# 企业微信
+WEBHOOK_CRITICAL_URL=https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=your-key</code></pre>
+
+    <h3>8.3 告警示例消息</h3>
+
+    <p>当触发告警时，你会收到类似这样的消息：</p>
+
+    <div class="panel bad">
+      <h4>🚨 [CRITICAL] RAG API 错误率过高</h4>
+      <p><strong>当前值</strong>：8.5%（阈值 5%）<br>
+      <strong>持续时间</strong>：5 分钟<br>
+      <strong>时间</strong>：2026-06-20 14:35:22<br>
+      <strong>标签</strong>：severity=critical, job=rag-api<br>
+      <strong>描述</strong>：过去 5 分钟 RAG API 错误率 8.5%，超过 5% 阈值。建议检查 LLM API 状态和 Chroma 连接。</p>
+      <p class="small">此告警由 Prometheus / Alertmanager 自动触发。如果问题未确认，1 小时后将再次通知。</p>
+    </div>
+  </section>
+
+  <!-- ===================== 第九部分：检索质量退化 ===================== -->
+  <section>
+    <h2>第九部分：检索质量退化自动检测</h2>
+
+    <p>这是最容易被忽视但影响最大的监控维度。大部分团队只看 CPU/内存/错误率——但<strong>检索质量下降是"慢性病"</strong>：</p>
+    <ul>
+      <li>知识库更新了，但 chunk 质量变差了</li>
+      <li>Embedding 模型切换了，但新模型不适合你的数据</li>
+      <li>Chroma 索引因为数据量增长而性能急剧下降</li>
+      <li>某个文档被误删了，导致特定问题再也检索不到</li>
+    </ul>
+    <p>这些问题不会立即导致 500 错误，但会让用户觉得"RAG 系统变笨了"——这种负面影响是致命的。</p>
+
+    <h3>9.1 基于基线对比的质量巡检脚本</h3>
+
+    <p>创建 <code>scripts/quality_check.py</code>，基于 L7 的评估框架做定期检查：</p>
+
+    <pre><code>"""
+scripts/quality_check.py — RAG 检索质量巡检脚本
+
+定期运行这个脚本（通过 cron/GitHub Actions），检查：
+1. 检索结果的 score 分布是否正常
+2. Golden Test Set 的召回率是否下降
+3. 针对预定义问题的 Faithfulness 评分是否变化
+
+当质量指标低于基线时，发出告警。
+这比"用户投诉了才知道"要主动得多。
+"""
+
+import json
+import sys
+import os
+from datetime import datetime
+
+# 确保可以从父目录导入
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from app.rag_pipeline import rag_pipeline
+from app.config import settings
+
+
+# ==================== 配置 ====================
+
+# Golden Test Set —— 一组你知道正确答案的查询
+GOLDEN_QUERIES = [
+    {"query": "什么是 RAG？", "expected_keywords": ["检索", "增强", "生成"]},
+    {"query": "Chroma 是什么数据库？", "expected_keywords": ["向量", "数据库"]},
+    {"query": "向量检索有哪些方式？", "expected_keywords": ["相似度", "ANN", "近似"]},
+]
+
+# 质量基线（从最近一次正常运行的巡检结果更新）
+QUALITY_BASELINE = {
+    "avg_score": 0.55,          # 平均检索分数
+    "min_recall@5": 0.7,       # 最低召回率（Top-5）
+    "min_faithfulness": 0.8,   # 最低 Faithfulness 评分
+}
+
+
+# ==================== 质量检查 ====================
+
+def check_retrieval_scores() -> dict:
+    """
+    检查检索分数的分布是否正常。
+
+    正常范围通常 0.3-0.9（取决于 embedding 模型和数据集）。
+    如果平均分突然大幅下降（>20%），说明可能有数据异常。
+    """
+    scores = []
+    for item in GOLDEN_QUERIES:
+        results = rag_pipeline.retrieve(item["query"], top_k=5)
+        if results:
+            scores.append(sum(r["score"] for r in results) / len(results))
+
+    if not scores:
+        return {"status": "error", "message": "检索无返回结果", "avg_score": 0}
+
+    avg_score = sum(scores) / len(scores)
+    baseline = QUALITY_BASELINE["avg_score"]
+
+    degradation = (baseline - avg_score) / baseline
+
+    return {
+        "status": "ok" if degradation < 0.2 else "degraded",
+        "avg_score": round(avg_score, 4),
+        "baseline_avg_score": baseline,
+        "degradation_pct": round(degradation * 100, 2),
+        "message": (
+            f"检索评分正常（avg={avg_score:.3f}）"
+            if degradation < 0.2
+            else f"⚠️ 检索评分下降 {degradation*100:.1f}%（baseline={baseline}，current={avg_score}）"
+        ),
+    }
+
+
+def check_recall_at_k() -> dict:
+    """
+    检查 Golden Test Set 的召回率（Recall@K）。
+
+    对每个已知答案的问题，检查 Top-5 检索结果中
+    是否包含期望的关键词。
+    """
+    total = len(GOLDEN_QUERIES)
+    found = 0
+
+    for item in GOLDEN_QUERIES:
+        results = rag_pipeline.retrieve(item["query"], top_k=5)
+        if not results:
+            continue
+
+        # 检查结果中是否包含期望关键词
+        all_text = " ".join(r["text"] for r in results)
+        if any(kw in all_text for kw in item["expected_keywords"]):
+            found += 1
+
+    recall = found / total if total > 0 else 0
+    baseline = QUALITY_BASELINE["min_recall@5"]
+
+    return {
+        "status": "ok" if recall >= baseline else "degraded",
+        "recall@5": round(recall, 4),
+        "baseline_recall@5": baseline,
+        "message": (
+            f"Recall@5={recall:.1%}，高于基线 {baseline:.0%}"
+            if recall >= baseline
+            else f"⚠️ Recall@5={recall:.1%}，低于基线 {baseline:.0%}"
+        ),
+    }
+
+
+def check_embedding_consistency() -> dict:
+    """
+    检查 Embedding 的一致性（向量空间是否发生漂移）。
+
+    方法：对同一段文本计算两次 embedding，看向量是否一致。
+    如果 embedding 模型被切换或更新，两天的 embedding 可能
+    不在同一个向量空间中——导致检索结果质量下降。
+    """
+    test_text = "这是一个用于检测 embedding 一致性的测试句子。"
+
+    embedding1 = rag_pipeline._get_embedding(test_text)
+    embedding2 = rag_pipeline._get_embedding(test_text)
+
+    if not embedding1 or not embedding2:
+        return {"status": "error", "message": "无法获取 embedding"}
+
+    # 计算余弦相似度（两次理论上应该完全相同）
+    dot = sum(a * b for a, b in zip(embedding1, embedding2))
+    norm1 = sum(a * a for a in embedding1) ** 0.5
+    norm2 = sum(b * b for b in embedding2) ** 0.5
+    similarity = dot / (norm1 * norm2) if norm1 * norm2 > 0 else 0
+
+    return {
+        "status": "ok" if similarity > 0.99 else "warning",
+        "embedding_similarity": round(similarity, 6),
+        "message": (
+            f"Embedding 一致性正常（cosine={similarity:.6f}）"
+            if similarity > 0.99
+            else f"⚠️ Embedding 不一致！cosine={similarity:.6f}，可能模型已变更"
+        ),
+    }
+
+
+# ==================== 主流程 ====================
+
+def run_quality_check() -> dict:
+    """执行全部质量检查，输出结果并决定是否告警。"""
+    results = {
+        "timestamp": datetime.now().isoformat(),
+        "provider": settings.embedding_provider,
+        "model": settings.embedding_model,
+        "doc_count": rag_pipeline.doc_count,
+    }
+
+    # 检索分数检查
+    results["retrieval_scores"] = check_retrieval_scores()
+
+    # 召回率检查
+    results["recall"] = check_recall_at_k()
+
+    # Embedding 一致性检查
+    results["embedding"] = check_embedding_consistency()
+
+    # 综合状态
+    checks = [
+        results["retrieval_scores"]["status"],
+        results["recall"]["status"],
+        results["embedding"]["status"],
+    ]
+    results["overall_status"] = "healthy" if all(s == "ok" for s in checks) else "degraded"
+    results["alert"] = any(s in ("degraded", "error", "warning") for s in checks)
+
+    return results
+
+
+if __name__ == "__main__":
+    report = run_quality_check()
+    print(json.dumps(report, ensure_ascii=False, indent=2))
+
+    if report.get("alert"):
+        print("\n🚨 质量告警！需要人工介入检查。", file=sys.stderr)
+        sys.exit(1)
+    else:
+        print("\n✅ 所有质量检查通过。")
+</code></pre>
+
+    <h3>9.2 自动化质量巡检</h3>
+
+    <p>将这个巡检脚本配置为定时任务（有两种方式）：</p>
+
+    <h4>方式一：服务器 cron 定时运行</h4>
+    <pre><code># 每天凌晨 2 点运行一次质量巡检
+0 2 * * * cd /opt/rag-service && docker compose exec rag-api python scripts/quality_check.py >> /var/log/rag-quality.log 2>&1
+
+# 如果巡检失败（exit code != 0），发送通知
+# 可以通过额外的告警脚本发送 webhook 到飞书/钉钉/企微</code></pre>
+
+    <h4>方式二：CI/CD 流水线中的质量门禁</h4>
+    <pre><code># .github/workflows/rag-quality-check.yml — RAG 质量巡检流水线
+#
+# 每天自动运行，或在知识库更新后触发。
+
+name: RAG Quality Check
+
+on:
+  schedule:
+    - cron: "0 2 * * *"      # 每天 UTC 2:00（北京时间 10:00）
+  workflow_dispatch:          # 也支持手动触发
+
+jobs:
+  quality-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 运行质量巡检
+        run: |
+          docker compose exec rag-api python scripts/quality_check.py
+
+      - name: 质量基线更新
+        if: success()  # 只有检查通过才更新基线
+        run: |
+          # 更新 QUALITY_BASELINE 为当前值
+          # 这样基线会缓慢漂移但不会突然下降
+          echo "更新质量基线完成"
+
+      - name: 告警通知
+        if: failure()
+        uses: appleboy/telegram-action@master
+        with:
+          to: ${{ secrets.TELEGRAM_TO }}
+          token: ${{ secrets.TELEGRAM_TOKEN }}
+          message: |
+            🚨 RAG 质量巡检失败！
+            时间：$(date '+%Y-%m-%d %H:%M:%S')
+            请登录服务器手动检查：docker compose exec rag-api python scripts/quality_check.py</code></pre>
+
+    <div class="panel good">
+      <h3>质量检测的"信号"与"噪声"</h3>
+      <p>质量检测最怕什么？<strong>假告警</strong>——告警太多，团队就不看了。以下是减少假告警的策略：</p>
+      <ul>
+        <li><strong>不要用绝对值</strong>："平均分 < 0.3" 这个阈值因数据集而异。更好的是<strong>相对变化率</strong>："比 7 天均线下降 20%"</li>
+        <li><strong>黄金数据集要精心设计</strong>：你的 Golden Test Set 必须是"有确定正确答案且覆盖主要业务场景"的——不要用模糊的问题做质检</li>
+        <li><strong>告警要有可操作性</strong>：每条告警要说明"发生了什么"、"影响范围"、"建议操作"——让值班的人不迷茫</li>
+        <li><strong>定期更新基线</strong>：知识库内容增长后，检索分数自然会变化。基线需要自适应更新</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- ===================== 第十部分：升级监控栈 ===================== -->
+  <section>
+    <h2>附：完整监控栈一键启动</h2>
+
+    <p>所有配置文件就位后，启动整个监控栈：</p>
+
+    <pre><code># 1. 创建需要的目录
+mkdir -p prometheus grafana/datasources grafana/dashboards \
+         loki promtail alertmanager scripts \
+         data/prometheus data/grafana data/loki data/alertmanager
+
+# 2. 复制配置文件到对应目录
+# （手动创建上面各节中展示的配置文件）
+
+# 3. 启动所有服务（含监控栈）
+docker compose up -d
+
+# 4. 验证所有服务正常运行
+docker compose ps
+
+# 5. 访问各服务
+# Grafana:     http://localhost:3001  (admin/admin)
+# Prometheus:  http://localhost:9090
+# Langfuse:    http://localhost:3000
+# Alertmanager:http://localhost:9093
+
+# 6. 验证 RAG 指标可被 Prometheus 抓取
+curl http://localhost:9090/api/v1/query?query=up
+
+# 7. 在 Grafana 中添加 Prometheus 数据源
+# （如果使用了 provisioning，这一步自动完成）
+</code></pre>
+
+    <div class="panel warn">
+      <h3>第一次启动可能遇到的问题</h3>
+      <ul>
+        <li><strong>cAdvisor 需要 privileged 权限</strong>：已在上面的编排中配置。如果遇到 <code>permission denied</code>，确认 <code>privileged: true</code></li>
+        <li><strong>Promtail 需要访问 Docker Socket</strong>：已映射 <code>/var/run/docker.sock</code>。如果容器内无法连接，确认宿主机 Docker 版本 ≥ 19.03</li>
+        <li><strong>Langfuse DB 首次启动初始化较慢</strong>：PostgreSQL 首次启动需要初始化数据库，Langfuse 的 migration 也需要时间——启动后等 1-2 分钟再访问</li>
+        <li><strong>端口冲突</strong>：如果宿主机 3000/9090/9100 端口已被占用，修改 docker-compose.yml 中的映射端口</li>
+      </ul>
+    </div>
+
+    <h3>快速验证清单</h3>
+
+    <p>启动后，按以下顺序验证监控体系是否正常工作：</p>
+
+    <table>
+      <tr><th>#</th><th>验证项</th><th>命令 / 操作</th><th>预期结果</th></tr>
+      <tr><td>1</td><td>RAG API 指标端点</td><td><code>curl localhost:8000/metrics | head -20</code></td><td>看到以 <code># HELP</code> 开头的 Prometheus 指标</td></tr>
+      <tr><td>2</td><td>Prometheus 可达</td><td><code>curl localhost:9090/api/v1/query?query=up</code></td><td>返回 JSON，<code>data.result</code> 包含多个 target</td></tr>
+      <tr><td>3</td><td>Grafana 可达</td><td>浏览器打开 <code>http://localhost:3001</code></td><td>登录页面（admin/admin）</td></tr>
+      <tr><td>4</td><td>Grafana 数据源</td><td>Grafana → Configuration → Data Sources</td><td>Prometheus 和 Loki 已自动添加</td></tr>
+      <tr><td>5</td><td>Loki 日志</td><td>Grafana → Explore → 数据源选 Loki → 查询 <code>{service="rag-api"}</code></td><td>看到 RAG API 的结构化日志</td></tr>
+      <tr><td>6</td><td>Langfuse</td><td>浏览器打开 <code>http://localhost:3000</code></td><td>Langfuse 登录页面</td></tr>
+      <tr><td>7</td><td>Langfuse 追踪</td><td>调用一次 /ask → 到 Langfuse 查看 Traces</td><td>看到最新的 trace 记录</td></tr>
+      <tr><td>8</td><td>质量巡检</td><td><code>docker compose exec rag-api python scripts/quality_check.py</code></td><td>输出 JSON，status 为 healthy</td></tr>
+      <tr><td>9</td><td>告警规则</td><td><code>curl localhost:9090/api/v1/rules</code></td><td>返回 JSON，包含 alert-rules.yml 中的规则</td></tr>
+    </table>
+  </section>
+
+  <!-- ===================== 动手实践 ===================== -->
+  <section>
+    <h2>动手实践 —— 搭建完整 RAG 监控体系</h2>
+
+    <div class="task">
+      <h4>练习 1：实现应用层指标埋点</h4>
+      <p>基于 L13 的 <code>rag-service/</code> 代码库，完成以下步骤：</p>
+      <ol>
+        <li>在 <code>rag-service/app/</code> 下创建 <code>metrics.py</code>，定义所有 RAG 专用指标（参考 2.2 节）</li>
+        <li>修改 <code>main.py</code>：添加 <code>/metrics</code> 端点和中间件</li>
+        <li>修改 <code>rag_pipeline.py</code>：在 <code>retrieve()</code> 和 <code>ask()</code> 中添加指标记录</li>
+        <li>在 <code>requirements.txt</code> 中添加 <code>prometheus-client</code></li>
+        <li>重启服务，访问 <code>/metrics</code> 验证指标已暴露</li>
+        <li>调用几次 <code>/ask</code> 和 <code>/retrieve</code>，再次查看 <code>/metrics</code>——看到指标数值变化</li>
+      </ol>
+      <p><strong>验证标准</strong>：<code>curl localhost:8000/metrics | grep rag_requests_total</code> 返回非零值。</p>
+    </div>
+
+    <div class="task">
+      <h4>练习 2：替换 Token 计数为精确值</h4>
+      <p>课程中的 token 计数用了 <code>len(text)</code> 估算——不够精确。改成精确计数：</p>
+      <ol>
+        <li>安装 <code>tiktoken</code>：<code>pip install tiktoken</code></li>
+        <li>在 <code>rag_pipeline.py</code> 的 <code>ask()</code> 中，用 <code>tiktoken.encoding_for_model()</code> 精确计算 prompt 和 completion 的 token 数</li>
+        <li>对比两种方式在同一个请求上的差异——通常 <code>len(text)</code> 会少算 20-40%</li>
+      </ol>
+    </div>
+
+    <div class="task">
+      <h4>练习 3：搭建完整的 Docker Compose 监控栈</h4>
+      <p>创建本课新增的所有配置文件：</p>
+      <ol>
+        <li><code>prometheus/prometheus.yml</code> —— 定义抓取目标</li>
+        <li><code>prometheus/alert-rules.yml</code> —— 定义告警规则</li>
+        <li><code>grafana/datasources/prometheus-datasource.yml</code> —— 自动配置数据源</li>
+        <li><code>loki/loki-config.yml</code> —— Loki 配置</li>
+        <li><code>promtail/promtail-config.yml</code> —— 日志采集配置</li>
+        <li><code>alertmanager/alertmanager.yml</code> —— 告警通知配置</li>
+      </ol>
+      <p>在 docker-compose.yml 中添加监控服务（prometheus、node-exporter、cadvisor、grafana、loki、promtail、alertmanager）并启动。</p>
+      <p><strong>验证标准</strong>：<code>docker compose ps</code> 看到所有监控服务均为 Up。Grafana 中 Prometheus 数据源显示 "Healthy"。</p>
+    </div>
+
+    <div class="task">
+      <h4>练习 4：搭建 Langfuse LLM 追踪</h4>
+      <ol>
+        <li>在 docker-compose.yml 中添加 <code>langfuse-server</code> 和 <code>langfuse-db</code> 服务</li>
+        <li>创建 <code>app/tracing.py</code>，实现 <code>get_langfuse()</code> 延迟初始化</li>
+        <li>修改 <code>rag_pipeline.py</code> 中的 <code>ask()</code>，加入 Trace 和 Generation 记录</li>
+        <li>启动后调用一次 <code>/ask</code>，然后在 Langfuse UI 中查看 trace</li>
+      </ol>
+      <p><strong>验证标准</strong>：Langfuse UI 中可以看到包含 "rag_query" trace 的完整调用链。</p>
+    </div>
+
+    <div class="task">
+      <h4>练习 5：配置告警并触发测试</h4>
+      <ol>
+        <li>按 8.2 节的指引，获取飞书/钉钉/企微的 webhook URL</li>
+        <li>在 <code>.env</code> 中设置 <code>WEBHOOK_CRITICAL_URL</code></li>
+        <li>启动 Alertmanager，确认 webhook 配置正确</li>
+        <li>手动触发一个测试告警：在 Prometheus UI 中"Execute"一个高错误率的查询（或用 <code>amtool</code> 发送测试告警）</li>
+        <li>确认机器人通知已到达群聊</li>
+      </ol>
+      <p><strong>验证标准</strong>：你的手机收到了来自飞书/钉钉/企微的告警通知。</p>
+    </div>
+
+    <div class="task">
+      <h4>练习 6：运行质量巡检并解读报告</h4>
+      <ol>
+        <li>创建 <code>scripts/quality_check.py</code>，填入 Golden Test Set（至少 5 个问题，覆盖你知识库的主要方向）</li>
+        <li>运行：<code>docker compose exec rag-api python scripts/quality_check.py</code></li>
+        <li>解读输出——特别注意 <code>degradation_pct</code> 和 <code>overall_status</code></li>
+        <li>如果状态不是 healthy，尝试找出原因并修复</li>
+      </ol>
+      <p><strong>验证标准</strong>：质量巡检输出 JSON 中的 <code>overall_status</code> 为 <code>healthy</code>。</p>
+    </div>
+  </section>
+
+  <!-- ===================== 检索练习 ===================== -->
+  <section>
+    <h2>检索练习：巩固你的理解</h2>
+
+    <p>凭记忆回答以下问题——不要回看上面的代码：</p>
+
+    <div class="quiz" id="quiz1">
+      <p><strong>1.</strong> RAG 系统可观测性的"三个层次"是什么？</p>
+      <button data-q="1" data-a="A">A. 开发环境/测试环境/生产环境</button>
+      <button data-q="1" data-a="B">B. 基础设施层/应用层/LLM 层</button>
+      <button data-q="1" data-a="C">C. CPU/内存/磁盘</button>
+      <button data-q="1" data-a="D">D. 代码层/数据层/部署层</button>
+      <div class="feedback" id="fb1"></div>
+    </div>
+
+    <div class="quiz" id="quiz2">
+      <p><strong>2.</strong> Prometheus 的 Histogram 指标类型适合监控 RAG 系统的什么数据？</p>
+      <button data-q="2" data-a="A">A. 总请求数</button>
+      <button data-q="2" data-a="B">B. 活跃连接数</button>
+      <button data-q="2" data-a="C">C. 请求延迟分布</button>
+      <button data-q="2" data-a="D">D. 当前文档数</button>
+      <div class="feedback" id="fb2"></div>
+    </div>
+
+    <div class="quiz" id="quiz3">
+      <p><strong>3.</strong> Langfuse 中，用于记录一次 LLM 调用的专门 Span 类型叫什么？</p>
+      <button data-q="3" data-a="A">A. Span</button>
+      <button data-q="3" data-a="B">B. Trace</button>
+      <button data-q="3" data-a="C">C. Generation</button>
+      <button data-q="3" data-a="D">D. Session</button>
+      <div class="feedback" id="fb3"></div>
+    </div>
+
+    <div class="quiz" id="quiz4">
+      <p><strong>4.</strong> 在 PromQL 中，将 Counter 类型的指标转换为每秒速率应该用什么函数？</p>
+      <button data-q="4" data-a="A">A. avg()</button>
+      <button data-q="4" data-a="B">B. rate()</button>
+      <button data-q="4" data-a="C">C. sum()</button>
+      <button data-q="4" data-a="D">D. delta()</button>
+      <div class="feedback" id="fb4"></div>
+    </div>
+
+    <div class="quiz" id="quiz5">
+      <p><strong>5.</strong> 在"指标 → 日志 → 追踪"的故障排查链路中，下列哪个说法是正确的？</p>
+      <button data-q="5" data-a="A">A. 指标告诉你"具体发生了什么"，日志告诉你"有什么问题"</button>
+      <button data-q="5" data-a="B">B. 指标告诉你"有什么问题"，日志告诉你"是哪个环节出的问题"</button>
+      <button data-q="5" data-a="C">C. 指标告诉你"有什么问题"，日志告诉你"具体发生了什么"，追踪告诉你"是哪个环节"</button>
+      <button data-q="5" data-a="D">D. 三个工具各自独立使用，不需要关联</button>
+      <div class="feedback" id="fb5"></div>
+    </div>
+
+    <div class="quiz" id="quiz6">
+      <p><strong>6.</strong> 为什么检索质量退化检测不能只靠 Prometheus 指标？</p>
+      <button data-q="6" data-a="A">A. Prometheus 不支持存储字符串数据</button>
+      <button data-q="6" data-a="B">B. 检索质量需要 Golden Test Set 和语义评估，而不仅是数值阈值</button>
+      <button data-q="6" data-a="C">C. 因为 Prometheus 的 Gauge 指标不支持小数</button>
+      <button data-q="6" data-a="D">D. 检索质量监控需要用到机器学习</button>
+      <div class="feedback" id="fb6"></div>
+    </div>
+  </section>
+
+  <!-- ===================== 故障诊断 ===================== -->
+  <section>
+    <h2>故障诊断：常见问题与排查</h2>
+
+    <div class="panel bad">
+      <h3>❌ 问题一：调用 /metrics 返回 404</h3>
+      <p><strong>原因</strong>：metrics 路由未注册，或中间件未应用。</p>
+      <p><strong>排查步骤</strong>：</p>
+      <ol>
+        <li>检查 <code>app/main.py</code> 中是否导入了 <code>metrics_middleware</code> 和 <code>get_metrics</code></li>
+        <li>确认有 <code>app.middleware("http")(metrics_middleware)</code> 这行代码</li>
+        <li>确认有 <code>@app.get("/metrics")</code> 路由装饰器</li>
+        <li>检查是否有其他路由覆盖了 <code>/metrics</code> 路径（比如 Nginx 配置）</li>
+      </ol>
+    </div>
+
+    <div class="panel bad">
+      <h3>❌ 问题二：Grafana 中 Prometheus 数据源显示 "Unreachable"</h3>
+      <p><strong>原因</strong>：Grafana 容器无法通过 <code>http://prometheus:9090</code> 访问 Prometheus。</p>
+      <p><strong>排查步骤</strong>：</p>
+      <ol>
+        <li>检查两个服务是否在同一个 Docker 网络（<code>rag-network</code>）中</li>
+        <li>进入 Grafana 容器测试连接：<code>docker compose exec grafana sh -c "wget -qO- http://prometheus:9090/api/v1/query?query=up"</code></li>
+        <li>检查 <code>grafana/datasources/prometheus-datasource.yml</code> 中的 URL 是否正确</li>
+        <li>如果用了 <code>localhost</code> 而不是 Docker 服务名——在 Docker 网络内部，服务名才是正确的 host</li>
+      </ol>
+    </div>
+
+    <div class="panel bad">
+      <h3>❌ 问题三：Promtail 无法采集容器日志，Loki 中没有数据</h3>
+      <p><strong>原因</strong>：Promtail 无法访问 Docker Socket 或配置有误。</p>
+      <p><strong>排查步骤</strong>：</p>
+      <ol>
+        <li>检查 Promtail 日志：<code>docker compose logs promtail</code>——是否有 <code>error reading docker socket</code> 之类的错误</li>
+        <li>确认 <code>docker.sock</code> 已正确挂载：<code>docker compose exec promtail ls -la /var/run/docker.sock</code>——应该显示 socket 文件</li>
+        <li>检查 promtail 配置中的 <code>docker_sd_configs</code> 是否拼写正确</li>
+        <li>在 Grafana Explore 中手动查询 <code>{job="docker"}</code> 而不是 <code>{service="rag-api"}</code>——确认 label 是否正确</li>
+      </ol>
+    </div>
+
+    <div class="panel bad">
+      <h3>❌ 问题四：Langfuse 启动后页面白屏或报 DB 错误</h3>
+      <p><strong>原因</strong>：Langfuse 的 PostgreSQL 数据库未就绪或 schema 迁移失败。</p>
+      <p><strong>排查步骤</strong>：</p>
+      <ol>
+        <li>检查 PostgreSQL 是否健康：<code>docker compose logs langfuse-db</code>——应有 "database system is ready to accept connections"</li>
+        <li>检查 Langfuse 日志：<code>docker compose logs langfuse-server</code>——寻找 migration 错误</li>
+        <li>确认 <code>DATABASE_URL</code> 环境变量中的用户名/密码与 PostgreSQL 配置一致</li>
+        <li>如果持续失败，尝试重建：<code>docker compose down -v langfuse-db && docker compose up -d langfuse-db</code>（⚠️ 会丢失已存储的追踪数据）</li>
+      </ol>
+    </div>
+
+    <div class="panel bad">
+      <h3>❌ 问题五：告警触发但没有收到通知</h3>
+      <p><strong>原因</strong>：Alertmanager 配置或 webhook URL 问题。</p>
+      <p><strong>排查步骤</strong>：</p>
+      <ol>
+        <li>检查 Alertmanager 日志：<code>docker compose logs alertmanager</code>——是否有 "Error sending webhook" 错误</li>
+        <li>在 Alertmanager UI（<code>http://localhost:9093</code>）查看告警是否确实到达了 Alertmanager</li>
+        <li>手动测试 webhook URL：<code>curl -X POST $WEBHOOK_CRITICAL_URL -H 'Content-Type: application/json' -d '{"msg":"test"}'</code></li>
+        <li>检查 <code>.env</code> 中的 webhook URL 是否被正确注入到 Alertmanager 容器（注意 <code>${WEBHOOK_CRITICAL_URL}</code> 语法）</li>
+      </ol>
+    </div>
+  </section>
+
+  <!-- ===================== 参考资源 ===================== -->
+  <section>
+    <h2>参考资源</h2>
+    <p>本课涉及的知识点，推荐以下资源进一步深入学习：</p>
+    <ul>
+      <li><strong>Prometheus 官方文档</strong>：<a href="https://prometheus.io/docs/introduction/overview/">Overview</a>——Prometheus 架构、概念和数据模型。建议先读 <a href="https://prometheus.io/docs/prometheus/latest/querying/basics/">PromQL 基础</a>，掌握 rate() / histogram_quantile() / sum by() 三个核心函数</li>
+      <li><strong>Prometheus Python Client</strong>：<a href="https://github.com/prometheus/client_python">GitHub</a>——Python 指标埋点的完整文档，包括自定义 Collector、多进程模式、Flask/Django 集成</li>
+      <li><strong>Grafana 官方文档</strong>：<a href="https://grafana.com/docs/grafana/latest/">Grafana</a>——仪表盘制作、数据源配置、告警、Provisioning 等。重点关注 <a href="https://grafana.com/docs/grafana/latest/alerting/">Grafana Alerting</a>（可作为 Alertmanager 的替代方案）</li>
+      <li><strong>Langfuse 文档</strong>：<a href="https://langfuse.com/docs">Langfuse Docs</a>——完整的 LLM 可观测性平台文档。重点阅读 <a href="https://langfuse.com/docs/sdk/python">Python SDK</a> 和 <a href="https://langfuse.com/docs/deployment/self-hosted">Self-hosting 部署指南</a></li>
+      <li><strong>Loki 文档</strong>：<a href="https://grafana.com/docs/loki/latest/">Loki</a>——日志聚合系统。关注 <a href="https://grafana.com/docs/loki/latest/logql/">LogQL 查询语言</a> 和 <a href="https://grafana.com/docs/loki/latest/clients/promtail/">Promtail 配置</a></li>
+      <li><strong>Prometheus Alerting Rules</strong>：<a href="https://prometheus.io/docs/prometheus/latest/configuration/alerting_rules/">Alerting Rules</a>——告警规则的完整语法和最佳实践</li>
+      <li><strong>Alertmanager 配置</strong>：<a href="https://prometheus.io/docs/alerting/latest/alertmanager/">Alertmanager</a>——路由、分组、抑制、接收者的完整配置指南</li>
+      <li><strong>Datadog RAG 监控指南</strong>：<a href="https://www.datadoghq.com/blog/rag-monitoring/">RAG Monitoring Guide</a>——Datadog 团队总结的 RAG 监控最佳实践，涵盖关键指标定义和监控策略（供应商中立，概念通用）</li>
+      <li><strong>Grafana Loki vs ELK 对比</strong>：<a href="https://grafana.com/blog/2024/07/23/loki-vs-elasticsearch/">Loki vs Elasticsearch</a>——官方对比，帮助你在日志方案选型时做决策</li>
+      <li><strong>OpenTelemetry Python SDK</strong>：<a href="https://opentelemetry.io/docs/languages/python/">OpenTelemetry Python</a>——如果未来你的 RAG 系统需要跨服务追踪（多个微服务），OTel 是标准方案</li>
+    </ul>
+    <p class="small">所有资源已在 <code>RESOURCES.md</code> 中记录，可按需查阅。</p>
+  </section>
+
+  <!-- ===================== 结尾 ===================== -->
+  <section>
+    <h2>课后思考</h2>
+
+    <p>到今天为止，模块三（生产化部署与运维）全部完成。回顾你走过的路：</p>
+    <table>
+      <tr><th>课程</th><th>你获得了什么</th></tr>
+      <tr><td>L13：Docker Compose 容器化部署</td><td>FastAPI RAG 服务 + Docker 多阶段构建 + Compose 多服务编排 + 健康检查 + JSON 日志</td></tr>
+      <tr><td>L14：云部署与 CI/CD 流水线</td><td>云服务器部署 + HTTPS + GitHub Actions 自动发布 + 蓝绿部署 + 安全检查清单</td></tr>
+      <tr><td>L15：系统监控与可观测性</td><td>Prometheus 自定义指标 + Grafana 仪表盘 + Langfuse 追踪 + Loki 日志 + 告警 + 质量检测</td></tr>
+    </table>
+
+    <p>你的 RAG 系统从"本地的 Python 脚本"变成了：</p>
+    <ul>
+      <li>✅ <strong>可部署的</strong>——Docker 容器化，一键启动</li>
+      <li>✅ <strong>可发布的</strong>——CI/CD 流水线，git push 自动上线</li>
+      <li>✅ <strong>可观测的</strong>——Prometheus 指标 + Grafana 仪表盘</li>
+      <li>✅ <strong>可追踪的</strong>——Langfuse 记录每次 LLM 调用</li>
+      <li>✅ <strong>可告警的</strong>——出问题自动通知到手机</li>
+      <li>✅ <strong>可主动防御的</strong>——质量巡检提前发现检索退化</li>
+    </ul>
+
+    <p>这就是生产级的 RAG 系统。下一课开始<strong>模块四：企业级安全与优化</strong>——我们将给系统加上 <strong>安全护栏</strong>（L16：权限体系、数据脱敏、注入攻击防御）、<strong>成本控制</strong>（L17：多级缓存、模型降级、索引优化），以及<strong>人工兜底</strong>（L18：人工转接、反馈闭环）。</p>
+
+    <p>如果你对今天的内容有任何疑问——拖放一个面板到 Grafana 时报错、某个 PromQL 查询不生效、Langfuse trace 看不到数据——随时可以追问。监控体系涉及的工具比较多，多花点时间把每个组件之间的"连接"搞清楚，回报会非常大。</p>
+
+    <p><strong>对 AI 老师追问是深度学习的最佳路径</strong>。记住你学到的东西，下一课见。</p>
+  </section>
+
+  <!-- ===================== 交互式问答 JS ===================== -->
+  <script>
+  document.querySelectorAll('.quiz button').forEach(btn => {
+    btn.addEventListener('click', function() {
+      const q = this.dataset.q;
+      const a = this.dataset.a;
+      const fb = document.getElementById('fb' + q);
+      const siblings = this.parentElement.querySelectorAll('button');
+      const answers = {
+        '1': 'B', '2': 'C', '3': 'C', '4': 'B', '5': 'C', '6': 'B',
+      };
+
+      siblings.forEach(s => {
+        s.classList.remove('selected', 'correct', 'wrong');
+        s.disabled = true;
+        s.style.cursor = 'default';
+      });
+
+      this.classList.add('selected');
+
+      if (a === answers[q]) {
+        this.classList.add('correct');
+        fb.textContent = '✅ 正确！' + {
+          '1': '可观测性的三个层次是基础设施层（CPU/内存/磁盘）、应用层（QPS/延迟/错误率）、LLM 层（token 消耗/响应时间/质量指标）。三个层次缺一不可，且需要能互相关联。',
+          '2': 'Histogram 适合记录值的分布统计。延迟分布是 Histogram 的经典应用场景——你可以计算 P50/P95/P99。总请求数和错误数用 Counter，活跃连接数和文档数用 Gauge。',
+          '3': 'Generation 是 Langfuse 专门用于 LLM 调用的 Span 类型，可以记录 model、input、output、usage（token 用量）等 LLM 专有字段。',
+          '4': 'rate(counter[5m]) 计算过去 5 分钟的平均每秒速率。delta() 计算两个时间点的差值，avg() 和 sum() 是聚合函数，不适用于 Counter 到速率的转换。',
+          '5': 'C 准确地描述了三者的关系：指标（有什么问题）→ 日志（具体发生了什么）→ 追踪（哪个环节出的问题）。三者需要互相关联才能高效排查。',
+          '6': '检索质量是语义层面的——需要一个精心设计的 Golden Test Set 和有语义理解的评估方法（如 L7 的 RAGAS）。仅靠数值阈值（如检索分数）无法感知"语义不匹配"这种质量下降。',
+        }[q];
+      } else {
+        this.classList.add('wrong');
+        fb.textContent = '❌ 再想想。正确答案是 ' + answers[q] + '。' + {
+          '1': 'B. 三个层次是基础设施层/应用层/LLM 层。CPU/内存/磁盘只是基础设施层的一部分，不是完整的层次划分。',
+          '2': 'C. 延迟分布用 Histogram。Counter 是"只增不减的计数器"，Gauge 是"可增可减的瞬态值"。请求延迟的多分位数计算需要 Histogram 或 Summary。',
+          '3': 'C. Generation。Trace 是整个请求链路，Span 是链路中的子阶段，Session 是一组关联的 Trace。Generation 是专门记录 LLM 调用的 Span 子类型。',
+          '4': 'B. rate()。avg() 和 sum() 是聚合函数，delta() 返回两个时间点的差值。将 Counter 转换为速率只有 rate()（或 irate()）能做到。',
+          '5': 'C。指标(告警触发) → 日志(查看详情) → 追踪(定位环节)。三个工具是递进关联的关系，不是独立的。',
+          '6': 'B。检索质量下降检测需要 Golden Test Set + 语义理解（如检查召回率、Faithfulness），仅靠检索分数无法判断"检索是否返回了语义相关的内容"。',
+        }[q];
+      }
+    });
+  });
+  </script>
+
+</main>
+</body>
+</html>

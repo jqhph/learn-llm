@@ -110,6 +110,80 @@
 - [Haystack Documentation](https://docs.haystack.deepset.ai/)
   Official Haystack documentation. Use for: alternative NLP framework with clean Pipeline abstraction — especially useful for teams using OpenSearch/Elasticsearch.
 
+## Knowledge (continued — cloud deployment & CI/CD)
+
+- [Docker Official Docs: Multi-stage builds](https://docs.docker.com/build/building/multi-stage/)
+  Official Docker documentation on multi-stage builds. Use for: optimizing Docker images by separating build and runtime stages — covered in L13 and foundational for cloud deployment in L14.
+- [Docker Compose Official Docs](https://docs.docker.com/compose/)
+  Full reference for Docker Compose file format, networking, volumes, and health checks. Use for: orchestrating multi-service RAG stack in cloud deployment.
+- [Docker Official Docs: Deploy your app](https://docs.docker.com/get-started/08_deploying/)
+  Official guide for deploying Docker apps to production. Use for: understanding the deployment workflow from local dev to cloud production.
+- [GitHub Actions: Deploying to your server](https://docs.github.com/en/actions/deployment/deploying-to-your-server)
+  Official GitHub Actions guide for SSH-based deployment. Use for: setting up CI/CD pipeline for RAG service — workflow files, secrets, SSH keys.
+- [GitHub Actions: Publish Docker containers](https://docs.github.com/en/actions/publishing-packages/publishing-docker-images)
+  Official guide for building and pushing Docker images in GitHub Actions. Use for: automating Docker image build and push to Docker Hub or GitHub Container Registry.
+- [appleboy/ssh-action](https://github.com/appleboy/ssh-action)
+  GitHub Action for executing commands on remote servers via SSH. Use for: the deployment step in CI/CD pipeline — pull latest image and restart services on the cloud server.
+- [Let's Encrypt / Certbot Official Docs](https://certbot.eff.org/)
+  Official Certbot documentation for obtaining and renewing Let's Encrypt SSL/TLS certificates. Use for: configuring HTTPS for your RAG API with auto-renewal via systemd timer.
+- [Let's Encrypt: How it works](https://letsencrypt.org/how-it-works/)
+  Explains the ACME protocol and certificate validation methods (HTTP-01, DNS-01). Use for: understanding how automatic HTTPS certificate issuance works.
+- [阿里云 ECS 官方文档](https://help.aliyun.com/product/25365.html)
+  Official Alibaba Cloud Elastic Compute Service documentation. Use for: creating and managing cloud servers, security groups, and networking.
+- [阿里云 ACR 容器镜像服务](https://help.aliyun.com/product/607758.html)
+  Official Alibaba Cloud Container Registry documentation. Use for: storing and managing Docker images in the Chinese cloud region for fast pull speeds on ECS.
+- [腾讯云 CVM 官方文档](https://cloud.tencent.com/document/product/213)
+  Official Tencent Cloud Virtual Machine documentation. Use for: creating and managing cloud servers as an alternative to Alibaba Cloud.
+- [12 Factor App: Backing Services](https://12factor.net/zh_cn/backing-services)
+  Principle of treating backing services as attached resources via URL/config. Use for: the architectural principle behind switching between local containerized services and cloud-managed services (Milvus/ES/RDS).
+- [Mozilla Observatory: TLS configuration](https://observatory.mozilla.org/)
+  Tool and guide for analyzing and hardening HTTPS configuration. Use for: validating your Nginx SSL configuration meets modern security standards.
+- [GitHub Actions: Workflow syntax](https://docs.github.com/en/actions/using-workflows/workflow-syntax-for-github-actions)
+  Complete reference for GitHub Actions workflow YAML syntax. Use for: customizing CI/CD pipeline — triggers, jobs, steps, environments, and conditionals.
+- [阿里云 Milvus 托管服务](https://help.aliyun.com/product/303301.html)
+  Official Alibaba Cloud managed Milvus service documentation. Use for: using enterprise-grade vector database without self-hosting, as an alternative to Chroma in production.
+- [阿里云 Elasticsearch 托管服务](https://help.aliyun.com/product/57736.html)
+  Official Alibaba Cloud Elasticsearch service documentation. Use for: hybrid search (BM25 + vector) in production without self-hosting ES cluster.
+- [Blue-Green Deployment Strategy (Martin Fowler)](https://martinfowler.com/bliki/BlueGreenDeployment.html)
+  Original article defining the blue-green deployment pattern. Use for: understanding zero-downtime deployment strategies for the RAG service.
+
+## Knowledge (continued — monitoring, observability & alerting)
+
+- [Prometheus Official Documentation](https://prometheus.io/docs/introduction/overview/)
+  Official Prometheus documentation. Use for: understanding Prometheus architecture, metric types (counter/gauge/histogram/summary), query language (PromQL), and service discovery for container monitoring in L15.
+- [Prometheus Python Client](https://github.com/prometheus/client_python)
+  Official Python client library for Prometheus metrics. Use for: instrumenting FastAPI RAG services with custom metrics — request count, latency histograms, chunk count distributions, error counters.
+- [Grafana Official Documentation](https://grafana.com/docs/grafana/latest/)
+  Official Grafana documentation. Use for: creating dashboards, configuring data sources (Prometheus/Loki), alerting, and dashboard provisioning via JSON.
+- [Grafana Dashboards — Node Exporter Full](https://grafana.com/grafana/dashboards/1860-node-exporter-full/)
+  Community dashboard for Node Exporter system metrics (CPU, memory, disk, network). Use for: infrastructure layer monitoring — quick import into Grafana without building from scratch.
+- [Node Exporter Documentation](https://prometheus.io/docs/guides/node-exporter/)
+  Official guide for Node Exporter — host-level metrics exporter. Use for: collecting CPU/memory/disk/network metrics from the RAG server host.
+- [cAdvisor — Container Advisor](https://github.com/google/cadvisor)
+  Google's container metrics exporter. Use for: per-container CPU/memory/network/disk metrics visibility within Docker Compose stacks.
+- [Langfuse Documentation](https://langfuse.com/docs)
+  Official Langfuse documentation — open-source LLM observability platform. Use for: tracing LLM calls with context (prompt, response, token usage, latency), monitoring RAG pipeline quality, and debugging LLM behavior in production.
+- [Langfuse Python SDK](https://langfuse.com/docs/sdk/python)
+  Official Python SDK for Langfuse. Use for: instrumenting RAG applications with custom traces, spans, and LLM call logging — supports OpenAI SDK integration via `@observe()` decorator and `langfuse_context`.
+- [Loki Documentation](https://grafana.com/docs/loki/latest/)
+  Official Loki documentation — horizontally-scalable, highly-available log aggregation system. Use for: collecting and querying Docker container JSON logs in Grafana, as a lightweight alternative to ELK Stack.
+- [Promtail Documentation](https://grafana.com/docs/loki/latest/clients/promtail/)
+  Official Promtail documentation — log collector for Loki. Use for: scraping Docker container logs, adding labels, and shipping structured logs to Loki.
+- [Alertmanager Documentation](https://prometheus.io/docs/alerting/latest/alertmanager/)
+  Official Alertmanager documentation. Use for: managing alerts from Prometheus — grouping, silencing, inhibition, and routing to notification channels (email, Slack, webhook).
+- [Prometheus Alerting Rules](https://prometheus.io/docs/prometheus/latest/configuration/alerting_rules/)
+  Official guide on defining alert rules in Prometheus. Use for: setting up RAG-specific alerts — error rate spikes, high latency, token consumption anomalies.
+- [Grafana Alerting](https://grafana.com/docs/grafana/latest/alerting/)
+  Grafana's built-in alerting system as an alternative to Alertmanager. Use for: managing alerts directly in Grafana with notification channels including webhooks to Feishu/DingTalk/WeCom.
+- [OpenTelemetry Python SDK](https://opentelemetry.io/docs/languages/python/)
+  Official OpenTelemetry Python SDK. Use for: vendor-neutral distributed tracing across the RAG stack — can export traces to Jaeger, Zipkin, or Langfuse as a complementary approach.
+- [Grafana Loki vs ELK Stack Comparison](https://grafana.com/blog/2024/07/23/loki-vs-elasticsearch/)
+  Official comparison of Loki vs Elasticsearch for log aggregation. Use for: understanding the trade-offs between Loki's label-based indexing and ES's full-text indexing in the context of RAG system logs.
+- [Datadog RAG Monitoring Guide](https://www.datadoghq.com/blog/rag-monitoring/)
+  Datadog's practical guide to monitoring RAG systems. Use for: understanding the key metrics to track in RAG pipelines — retrieval latency, generation latency, chunk diversity, and end-to-end quality scores.
+- [Pyroscope — Continuous Profiling](https://grafana.com/oss/pyroscope/)
+  Continuous profiling tool from Grafana. Use for: identifying performance bottlenecks in Python RAG code — CPU/memory hot spots at the function level.
+
 ## Gaps
 
 - Need to add production architecture references for enterprise permissions, tenant isolation, monitoring, and cost controls after the demo stage.
